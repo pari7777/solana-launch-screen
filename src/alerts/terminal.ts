@@ -25,6 +25,8 @@ export function printStatus(s: { scanned: number; final: Record<string, number>;
   console.log(`${C.m}── ${s.mode.toUpperCase()} · stream ${s.stream} · scanned ${s.scanned} · ` +
     `select ${f.SELECT_FOR_REVIEW ?? 0} / reject ${f.REJECT ?? 0} · open ${s.open} · P&L ${s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(4)} SOL · ` +
     `RPC p50 ${s.rpc.p50_ms ?? "—"}ms, ${s.rpc.errors} errors · ${s.url} ──${C.x}`);
+  const eps = s.rpc.endpoints ?? [];
+  if (eps.length > 1) console.log(`${C.d}   rpc endpoints: ${eps.map((e: any) => `${new URL(e.url).host} ok ${e.ok} / fail ${e.fail}${e.restingFor ? ` (resting ${e.restingFor}s)` : ""}`).join(" · ")}${C.x}`);
 }
 
 export function banner(lines: string[]) {

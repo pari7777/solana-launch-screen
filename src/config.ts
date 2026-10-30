@@ -12,6 +12,9 @@ const list = (k: string, d: string) => env(k, d).split(",").map((s) => s.trim())
 export type TradeMode = "paper" | "browser" | "keypair";
 
 const mode = env("MODE", "paper").toLowerCase() as TradeMode;
+const PUBLIC_HOSTS = ["api.mainnet-beta.solana.com", "solana-rpc.publicnode.com"];
+const PUBLIC_ONLY = (process.env.RPC_URL ?? "").trim() === "" ||
+  (process.env.RPC_URL ?? "").split(",").every((u) => PUBLIC_HOSTS.some((h) => u.includes(h)));
 
 export const config = {
   chain: "SOLANA",
@@ -25,12 +28,14 @@ export const config = {
 
   // ── data sources ──
   stream: env("STREAM", "auto").toLowerCase() as "auto" | "rpc" | "pumpportal",
-  rpcUrl: env("RPC_URL", "https://api.mainnet-beta.solana.com"),
+  // One URL, or several separated by commas: the bot rotates between them and rests any that rate-limit.
+  // Default: free public endpoints that need no account.
+  rpcUrl: env("RPC_URL", "https://api.mainnet-beta.solana.com,https://solana-rpc.publicnode.com"),
   rpcWssUrl: env("RPC_WSS_URL", ""),
   pumpPortalWs: env("PUMPPORTAL_WS", "wss://pumpportal.fun/api/data"),
   tradeUrl: env("TRADE_URL", "https://pumpportal.fun/api/trade-local"),
   pumpfunApi: env("PUMPFUN_API", "https://frontend-api-v3.pump.fun"),
-  rpcConcurrency: num("RPC_CONCURRENCY", 8),
+  rpcConcurrency: num("RPC_CONCURRENCY", PUBLIC_ONLY ? 4 : 8),
   databaseUrl: env("DATABASE_URL", ""),
   dataDir: env("DATA_DIR", "./data"),
 
@@ -44,7 +49,7 @@ export const config = {
   minCompleteness: num("MIN_DATA_COMPLETENESS", 0.6),
   checkPumpfunApi: bool("CHECK_PUMPFUN_API", true),
   checkMetadata: bool("CHECK_METADATA", false),
-  traceBuyers: num("TRACE_BUYERS", 4),
+  traceBuyers: num("TRACE_BUYERS", PUBLIC_ONLY ? 2 : 4),
   minTraceSol: num("MIN_TRACE_SOL", 0.05),
   trackCreatorsMinutes: num("TRACK_CREATORS_MINUTES", 30),
   devDumpPct: num("DEV_DUMP_PCT", 70),

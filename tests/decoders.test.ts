@@ -86,3 +86,31 @@ describe("curve math", () => {
     expect(big).toBeLessThan(small);
   });
 });
+
+describe("rpc failover", () => {
+  it("rotates endpoints, rests one that rate-limits, and passes real errors through", async () => {
+    const { multiTransport } = await import("../src/data/rpc");
+    const http = await import("node:http");
+    const hits = { a: 0, b: 0 };
+    const srv = (name: "a" | "b", limited: boolean) => http.createServer((req, res) => {
+      let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => {
+        hits[name]++;
+        const m = JSON.parse(body).method;
+        if (limited) { res.writeHead(429); return res.end("slow down"); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(m === "bad" ? { jsonrpc: "2.0", id: 1, error: { message: "Invalid params" } } : { jsonrpc: "2.0", id: 1, result: name }));
+      });
+    });
+    const A = srv("a", true).listen(0), B = srv("b", false).listen(0);
+    await new Promise((r) => setTimeout(r, 50));
+    const t = multiTransport([`http://127.0.0.1:${(A.address() as any).port}`, `http://127.0.0.1:${(B.address() as any).port}`]);
+    const out = await Promise.all(Array.from({ length: 6 }, () => t("getSlot", [], 2000)));
+    expect(out.every((x) => x === "b")).toBe(true);
+    const firstWave = hits.a;                                 // parallel calls may all try A before it is rested
+    for (let i = 0; i < 6; i++) expect(await t("getSlot", [], 2000)).toBe("b");
+    expect(hits.a).toBe(firstWave);                           // once rested, A is not called again
+    await expect(t("bad", [], 2000)).rejects.toThrow("Invalid params");
+    expect(t.status()[0].restingFor).toBeGreaterThan(0);
+    A.close(); B.close();
+  });
+});
