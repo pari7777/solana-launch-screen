@@ -1,0 +1,26 @@
+{
+  "name": "base-launch-screen",
+  "version": "1.0.0",
+  "description": "First-6-seconds launch screening for new Clanker coins on Base, with paper trading",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.13",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.0",
+    "tsx": "^4.19.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
