@@ -223,7 +223,9 @@ export class Screener {
     else {
       try { quote = await withTimeout(this.quoter.analyse(route, config.buyEth, risk.topHolderTokens, risk.clusterTokens), 3500 + 1500 * (route.hops.length - 1)); }
       catch (e: any) {
-        quoteError = String(e?.shortMessage ?? e?.message ?? e).slice(0, 120);
+        quoteError = String(e?.shortMessage ?? e?.message ?? e).replace(/\s+/g, " ").slice(0, 100);
+        const inner = e?.cause?.data?.args?.[0] ?? e?.cause?.cause?.data?.args?.[0];          // hook revert wrapped by the V4 Quoter
+        if (typeof inner === "string") quoteError = `hook reverted ${inner.slice(0, 74)}`;
         if (/revert/i.test(quoteError)) {
           try { await withTimeout(this.quoter.buy(route, 10n ** 14n), 2500); sellReverted = true; } catch { /* buys fail too: trading not open */ }
         }

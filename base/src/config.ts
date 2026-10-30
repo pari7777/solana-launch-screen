@@ -13,7 +13,8 @@ export const config = {
   paused: bool("PAUSED", false),
 
   // ── data sources (free, no account) ──
-  rpcUrls: list("BASE_RPC_URL", "https://mainnet.base.org,https://base-rpc.publicnode.com"),
+  // first endpoint takes the load; mainnet.base.org rate-limits hard (HTTP 429), so it is last
+  rpcUrls: list("BASE_RPC_URL", "https://base-rpc.publicnode.com,https://base.drpc.org,https://mainnet.base.org"),
   explorerApi: env("EXPLORER_API", "https://base.blockscout.com/api"),
   pollMs: num("POLL_MS", 1500),
   maxBlockRange: num("MAX_BLOCK_RANGE", 2000),

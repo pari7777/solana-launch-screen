@@ -49,12 +49,12 @@ export const EVALUATORS: Record<string, Evaluator> = {
     const lk = lc(ev.launch.locker), e = { locker: ev.launch.locker, platform: ev.platform };
     switch (ev.platform) {
       case "clanker": return KNOWN_LOCKERS.has(lk) ? pass("liquidity locked in Clanker's LP locker (cannot be withdrawn)", e)
-                                                   : trig(`liquidity held by an unrecognised locker ${short(lk)}`, e);
+                                                   : trig(`liquidity held by an unrecognised locker ${lk}`, e);
       case "zora": return pass("liquidity minted by Zora's hook at launch — the creator cannot withdraw it", e);
       case "flaunch": return FLAUNCH_HOOKS.has(lk) ? pass("liquidity owned by the Flaunch PositionManager (fair launch + bid wall)", e)
                                                    : trig(`liquidity held by an unrecognised contract ${short(lk)}`, e);
       default: return DOPPLER_V4.has(lk) ? pass("liquidity held by the Doppler initializer until migration", e)
-                                         : trig(`Doppler initializer ${short(lk)} is not a known Uniswap v4 initializer`, e);
+                                         : trig(`Doppler initializer ${lk} is not a known Uniswap v4 initializer`, e);
     }
   } },
   supply_mismatch: { requires: ["onchain_supply"], fn: (ev) => {

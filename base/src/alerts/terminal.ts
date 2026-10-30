@@ -10,8 +10,8 @@ export function printDecision(r: Record_) {
   const o = r.output;
     const score = o.risk_score === null ? "  —" : String(o.risk_score).padStart(3);
   const reason = o.top_rejection_reasons[0];
-  const why = reason ? `${C.B}${reason.rule_id}${C.x} ${reason.evidence}` : `${C.g}all gates passed${C.x}`;
-  const sym = `$${r.meta.symbol}`.slice(0, 11).padEnd(11);
+  const why = reason ? `${C.B}${reason.rule_id}${C.x} ${reason.evidence.replace(/\s+/g, " ")}` : `${C.g}all gates passed${C.x}`;
+  const sym = `$${r.meta.symbol}`.replace(/\s+/g, " ").slice(0, 11).padEnd(11) + ` ${C.d}${String(r.meta.platform).split(" ")[0].slice(0, 7).padEnd(7)}${C.x}`;
   console.log(`${C.d}${r.meta.time}${C.x} ${COLOR[o.decision]}${C.B}${LABEL[o.decision]}${C.x} ${sym} ${r.meta.gated ? `${C.r}⛔${C.x}` : score}` +
     ` ${C.d}${o.confidence.padEnd(6)} ${(r.meta.elapsed_ms / 1000).toFixed(1)}s s${r.meta.stage}${C.x} │ ${why} ${C.d}→ ${r.meta.action}${C.x}`);
   if (config.logJson) console.log(JSON.stringify(o));
