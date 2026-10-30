@@ -63,7 +63,7 @@ const doppler: Source = {
     const a = log.args; if (!a?.asset) return null;
     return { ...base("doppler", log, at),
       token: a.asset, creator: Z, sender: Z, name: "", symbol: "",              // filled in by the watcher (tx sender, token metadata)
-      context: a.initializer, hook: a.poolOrHook, poolId: Z as Hex, pairedToken: a.numeraire, locker: a.initializer, poolKey: null };
+      context: a.initializer, hook: a.poolOrHook, platformHook: a.poolOrHook, poolId: Z as Hex, pairedToken: a.numeraire, locker: a.initializer, poolKey: null };
   },
 };
 

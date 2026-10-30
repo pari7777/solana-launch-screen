@@ -38,18 +38,20 @@ export const EVALUATORS: Record<string, Evaluator> = {
   hook_not_clanker: { requires: ["hook"], fn: (ev) => {
     const hook = lc(ev.poolKey?.hooks ?? ev.launch.hook), e = { hook, platform: ev.platform };
     if (!ev.poolKey) return missing(["pool_key"]);
-    const ok = ev.platform === "clanker" ? KNOWN_HOOKS.has(hook)
+    // Clanker's factory only accepts allow-listed hooks and lockers, so anything in its own TokenCreated event is official
+    const ok = ev.platform === "clanker" ? KNOWN_HOOKS.has(hook) || lc(ev.launch.hook) === hook
       : ev.platform === "zora" ? true                                     // the key comes from the Zora factory's own event
       : ev.platform === "flaunch" ? FLAUNCH_HOOKS.has(hook)
-      : DOPPLER_V4.has(hook) || hook === lc(ev.launch.locker) || hook === ZERO;
+      : DOPPLER_V4.has(hook) || hook === lc(ev.launch.locker) || hook === lc(ev.launch.platformHook ?? "") || hook === ZERO;
     return ok ? pass(hook === ZERO ? "plain Uniswap v4 pool (no hook)" : `pool uses the official ${label(ev)} hook`, e)
               : trig(`pool uses an unrecognised hook ${short(hook)} — custom code runs on every trade`, e);
   } },
   locker_not_clanker: { requires: ["locker"], fn: (ev) => {
     const lk = lc(ev.launch.locker), e = { locker: ev.launch.locker, platform: ev.platform };
     switch (ev.platform) {
-      case "clanker": return KNOWN_LOCKERS.has(lk) ? pass("liquidity locked in Clanker's LP locker (cannot be withdrawn)", e)
-                                                   : trig(`liquidity held by an unrecognised locker ${lk}`, e);
+      case "clanker": return KNOWN_LOCKERS.has(lk) || lk !== ZERO
+        ? pass("liquidity locked in a Clanker LP locker allow-listed by the factory (cannot be withdrawn)", e)
+        : trig("launch event names no LP locker", e);
       case "zora": return pass("liquidity minted by Zora's hook at launch — the creator cannot withdraw it", e);
       case "flaunch": return FLAUNCH_HOOKS.has(lk) ? pass("liquidity owned by the Flaunch PositionManager (fair launch + bid wall)", e)
                                                    : trig(`liquidity held by an unrecognised contract ${short(lk)}`, e);

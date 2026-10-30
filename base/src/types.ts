@@ -21,6 +21,7 @@ export interface LaunchEvent {
   startingTick: number;
   hook: Hex; poolId: Hex; pairedToken: Hex; locker: Hex; mevModule: Hex;   // zero address when the platform has none / not yet known
   extensionsSupply: bigint; extensions: Hex[];
+  platformHook?: Hex;         // Doppler: the hook its Airlock deployed for this launch (Create.poolOrHook)
   receivedAt: number;
   blockTime: number;          // seconds
 }
