@@ -1,5 +1,6 @@
 node_modules/
-data/
+/data/
 .env
 *.keypair.json
 bot-wallet.json
+.e2e/
