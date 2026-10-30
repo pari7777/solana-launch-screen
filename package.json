@@ -1,0 +1,31 @@
+{
+  "name": "solana-launch-screen",
+  "version": "1.0.0",
+  "description": "First-6-seconds launch screening engine for Solana pump.fun coins, with paper trading and wallet-linked buying",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "wallet:new": "tsx scripts/wallet-new.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.13",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.0",
+    "tsx": "^4.19.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

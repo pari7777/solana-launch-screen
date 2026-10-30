@@ -1,0 +1,6 @@
+{
+  "R051": { "params": { "max_pct": 40 } },
+  "R034": { "on_trigger": "WARN", "penalty": 30 },
+  "R105": { "enabled": false },
+  "R049": { "params": { "max_pct": 6 } }
+}

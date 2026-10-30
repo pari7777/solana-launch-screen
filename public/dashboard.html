@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Launch Screen</title>
+<style>
+:root{--bg:#0a0c10;--card:#12161d;--card2:#171c25;--line:#232a36;--txt:#e6e9ef;--mut:#8590a3;--dim:#5b6476;
+--rej:#ef4f5a;--wait:#f2a93b;--mon:#5aa2f7;--sel:#2fc46b;--warn:#c9a227;--na:#3a4252;--pur:#8b7cf6}
+*{box-sizing:border-box}
+body{margin:0;font:13.5px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--txt);padding:16px 16px 48px}
+.wrap{max-width:1320px;margin:0 auto}
+a{color:var(--mon);text-decoration:none}a:hover{text-decoration:underline}
+h1{font-size:18px;margin:0}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:24px 0 9px;font-weight:600}
+.mut{color:var(--mut)}.dim{color:var(--dim)}.sm{font-size:12px}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.badge{padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;letter-spacing:.05em}
+.b-paper{background:#1d3b7a;color:#d3e2ff}.b-live{background:#7b1d24;color:#ffd9dc}.b-browser{background:#4a2f7a;color:#e9ddff}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+.kpi .v{font-size:20px;font-weight:650;margin-top:3px;font-variant-numeric:tabular-nums}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+button:hover{border-color:var(--mon)}button.pri{background:var(--sel);color:#06210f;border:0}button.dan{background:var(--rej);color:#2a0507;border:0}
+.funnel{display:flex;height:28px;border-radius:8px;overflow:hidden;background:var(--card2)}
+.funnel div{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0a0c10;white-space:nowrap;overflow:hidden}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:8px}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start}
+@media(max-width:920px){.main{grid-template-columns:1fr}}
+.list{max-height:640px;overflow-y:auto;padding:0}
+.dec{display:grid;grid-template-columns:66px minmax(0,1fr) 44px;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.dec:hover{background:var(--card2)}.dec.on{background:#1b2230;box-shadow:inset 3px 0 0 var(--mon)}
+.pill{font-size:10px;font-weight:800;padding:3px 0;border-radius:6px;text-align:center;letter-spacing:.03em;color:#0a0c10}
+.REJECT{background:var(--rej)}.WAIT{background:var(--wait)}.MONITOR{background:var(--mon)}.SELECT_FOR_REVIEW{background:var(--sel)}
+.why{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc{font-variant-numeric:tabular-nums;text-align:right;font-weight:650}
+.detail{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto}
+.tabs{display:flex;gap:6px;margin:12px 0 4px}.tabs button{padding:5px 10px;font-size:12px}.tabs button.on{border-color:var(--mon);color:var(--mon)}
+.cat{display:grid;grid-template-columns:170px 1fr 34px;gap:8px;align-items:center;margin:6px 0;font-size:12px}
+.track{height:8px;background:var(--card2);border-radius:4px;overflow:hidden}.track div{height:100%;border-radius:4px}
+.reason{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+.rid{font:600 10.5px ui-monospace,Menlo,monospace;padding:2px 6px;border-radius:5px;flex:none;color:#0a0c10}
+.s-CRITICAL{background:var(--rej)}.s-HIGH{background:var(--wait)}.s-MEDIUM{background:var(--warn)}.s-LOW{background:var(--mon)}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px}
+.kv div{background:var(--card2);border-radius:8px;padding:6px 8px;font-size:11.5px;min-width:0}.kv b{display:block;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+pre{background:#0d1016;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;overflow:auto;max-height:520px;margin:0;white-space:pre}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:920px){.two{grid-template-columns:1fr}}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--mut);font-weight:500}
+.g{color:var(--sel)}.r{color:var(--rej)}.y{color:var(--wait)}
+.appr{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin:6px 0;background:var(--card2)}
+.dd{position:relative;height:8px;background:var(--card2);border-radius:4px;min-width:120px}
+.dd i{position:absolute;top:-3px;width:2px;height:14px;background:var(--rej)}
+.dd b{position:absolute;top:0;left:0;height:8px;border-radius:4px}
+.grid{display:grid;grid-template-columns:repeat(20,1fr);gap:3px}.grid span{aspect-ratio:1;border-radius:3px;font-size:8px;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.6);font-weight:700}
+.st-TRIGGERED{background:var(--rej)}.st-PASS{background:var(--sel)}.st-MISSING{background:var(--wait)}.st-NOT_APPLICABLE{background:var(--na);color:var(--mut)!important}
+</style></head><body><div class="wrap">
+
+<div class="row" style="justify-content:space-between">
+ <div class="row"><h1>🎯 Launch Screen</h1><span id="mode" class="badge b-paper">PAPER</span><span id="auto" class="badge" style="background:var(--card2);color:var(--mut)"></span></div>
+ <div class="row"><span class="sm mut"><span id="dot" class="dot" style="background:var(--wait)"></span><span id="feed">connecting…</span></span>
+  <button id="connect">Connect wallet</button></div>
+</div>
+<div class="sm mut" style="margin-top:4px">Solana · pump.fun · 120-rule screen in the first <span id="dl">6</span> s · this page runs only on your laptop</div>
+
+<div id="apprBox" style="display:none"><h2>Waiting for your wallet</h2><div class="card" id="appr"></div></div>
+
+<div class="kpis">
+ <div class="card kpi"><span class="mut sm">Coins scanned</span><div class="v" id="k-scan">—</div></div>
+ <div class="card kpi"><span class="mut sm">Selected</span><div class="v g" id="k-sel">—</div></div>
+ <div class="card kpi"><span class="mut sm">In stage 2</span><div class="v" style="color:var(--mon)" id="k-rev">—</div></div>
+ <div class="card kpi"><span class="mut sm">Decision p50 / p90</span><div class="v" id="k-ms">—</div></div>
+ <div class="card kpi"><span class="mut sm">Ruggers · rug funders</span><div class="v y" id="k-rug">—</div></div>
+ <div class="card kpi"><span class="mut sm">P&amp;L total · today (SOL)</span><div class="v" id="k-pnl">—</div></div>
+ <div class="card kpi"><span class="mut sm">Trades · win rate</span><div class="v" id="k-wr">—</div></div>
+ <div class="card kpi" id="k-balc"><span class="mut sm">Paper balance</span><div class="v" id="k-bal">—</div></div>
+</div>
+
+<h2>Decision funnel</h2>
+<div class="card">
+ <div class="sm mut" style="margin-bottom:6px">Stage 1 — inside the deadline</div><div class="funnel" id="f1"></div>
+ <div class="sm mut" style="margin:12px 0 6px">Final — after stage-2 re-checks</div><div class="funnel" id="f2"></div>
+ <div class="legend"><span><i class="REJECT"></i>REJECT</span><span><i class="WAIT"></i>WAIT</span><span><i class="MONITOR"></i>MONITOR</span><span><i class="SELECT_FOR_REVIEW"></i>SELECT_FOR_REVIEW</span></div>
+</div>
+
+<h2>Open positions <span class="dim" style="text-transform:none;letter-spacing:0">— red tick = exit line (high-water × (1 − <span id="tdd">35%</span>))</span></h2>
+<div class="card tw"><table><thead><tr><th>Coin</th><th>Status</th><th>Venue</th><th>Cost</th><th>Net liquidation value</th><th>High-water</th><th>Exit at</th><th>Drawdown</th><th>P&amp;L</th></tr></thead><tbody id="pos"></tbody></table></div>
+
+<div class="main">
+ <div><h2>Live decisions <span class="dim" style="text-transform:none;letter-spacing:0">— click for the full record</span></h2><div class="card list" id="decs"></div></div>
+ <div class="detail"><h2>Decision record</h2><div class="card" id="det"><span class="mut">Waiting for the first decision…</span></div></div>
+</div>
+
+<div class="two">
+ <div><h2>Most frequent rejection / wait rules</h2><div class="card" id="hits"></div></div>
+ <div><h2>Closed trades</h2><div class="card tw"><table><thead><tr><th>Closed</th><th>Coin</th><th>Cost</th><th>Back</th><th>P&amp;L</th><th>High-water</th><th>Exit</th></tr></thead><tbody id="tr"></tbody></table></div></div>
+</div>
+<div class="two">
+ <div><h2>Learned bad actors</h2><div class="card tw"><table><tbody id="flags"></tbody></table></div></div>
+ <div><h2>Data providers</h2><div class="card tw"><table><thead><tr><th>Provider</th><th>Status</th><th>Last OK</th><th>Slot</th><th>Fails</th></tr></thead><tbody id="health"></tbody></table></div></div>
+</div>
+<h2>Settings</h2><div class="card sm" id="set"></div>
+<p class="sm dim" style="margin-top:18px">A SELECT is a screening result, not a safety guarantee. Most new coins go to zero. Settings live in <span class="mono">.env</span>; rule thresholds in <span class="mono">config/rules-overrides.json</span>.</p>
+</div>
+
+<script src="https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sh=a=>a?esc(String(a).slice(0,4)+'…'+String(a).slice(-4)):'—';
+const f4=x=>x==null||isNaN(x)?'—':Number(x).toFixed(4);
+const sgn=x=>(x>=0?'+':'')+Number(x).toFixed(4);
+const COL={REJECT:'var(--rej)',WAIT:'var(--wait)',MONITOR:'var(--mon)',SELECT_FOR_REVIEW:'var(--sel)'};
+const ORDER=['REJECT','WAIT','MONITOR','SELECT_FOR_REVIEW'],LBL={SELECT_FOR_REVIEW:'SELECT'};
+const FL={contract:['Contract and sellability',30],liquidity:['Executable liquidity',25],creator:['Creator & deployer wallet',15],holders:['Early-holder distribution',10],buyers:['Independent buyers',10],execution:['Entry conditions',10]};
+let S=null,sel=null,tab='summary',rr={},RULES=null;
+const post=(u,b)=>fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j});
+const bar=v=>v>=80?'var(--sel)':v>=60?'var(--mon)':v>=40?'var(--wait)':'var(--rej)';
+
+// ───── wallet linking (Phantom / Solflare / Backpack) ─────
+let provider=null,pubkey=null,busy=new Set(),autoPrompt=true,prompted={};
+const findProvider=()=>window.phantom?.solana||window.solflare||window.backpack?.solana||window.solana||null;
+$('connect').onclick=async()=>{
+ provider=findProvider();
+ if(!provider){alert('No Solana wallet found in this browser. Install Phantom or Solflare, then reload.');return}
+ try{const r=await provider.connect();pubkey=(r?.publicKey||provider.publicKey).toString();hello();$('connect').textContent='🔗 '+pubkey.slice(0,4)+'…'+pubkey.slice(-4)}catch(e){alert('Wallet connection refused: '+e.message)}
+};
+async function hello(){if(pubkey)try{await post('api/wallet/hello',{pubkey})}catch(e){}}
+setInterval(hello,5000);
+async function approve(mint){
+ if(!pubkey){alert('Connect your wallet first.');return}
+ if(busy.has(mint))return;busy.add(mint);
+ try{
+  const {tx}=await post(`api/approvals/${mint}/prepare`,{pubkey});
+  const t=solanaWeb3.VersionedTransaction.deserialize(Uint8Array.from(atob(tx),c=>c.charCodeAt(0)));
+  const r=await provider.signAndSendTransaction(t);
+  const signature=typeof r==='string'?r:r.signature;
+  await post(`api/approvals/${mint}/submitted`,{pubkey,signature});
+ }catch(e){
+  if(/reject|cancel|declin/i.test(e.message||''))await post(`api/approvals/${mint}/reject`,{}).catch(()=>{});
+  else alert('Wallet transaction failed: '+e.message);
+ }finally{busy.delete(mint)}
+}
+function renderApprovals(list){
+ $('apprBox').style.display=list.length?'':'none';
+ $('appr').innerHTML=list.map(a=>`<div class="appr"><span class="pill ${a.side==='buy'?'SELECT_FOR_REVIEW':'REJECT'}" style="width:52px">${a.side.toUpperCase()}</span>
+  <div style="flex:1;min-width:0"><b>$${esc(a.symbol)}</b> <span class="sm mut">${esc(a.reason)}</span><div class="sm dim">${Math.round((Date.now()-a.createdAt)/1000)}s ago · ${sh(a.mint)}</div></div>
+  <button class="${a.side==='buy'?'pri':'dan'}" onclick="approve('${esc(a.mint)}')">${busy.has(a.mint)?'Waiting for wallet…':'Approve in wallet'}</button>
+  <button onclick="post('api/approvals/${esc(a.mint)}/reject',{})">Skip</button></div>`).join('')
+  +`<label class="sm mut"><input type="checkbox" id="ap" ${autoPrompt?'checked':''} onchange="autoPrompt=this.checked"> open the wallet automatically when an exit or selection arrives</label>`;
+ if(autoPrompt&&pubkey&&document.visibilityState==='visible'&&!busy.size)for(const a of list)if(Date.now()-(prompted[a.mint+a.side]||0)>30000){prompted[a.mint+a.side]=Date.now();approve(a.mint);break}
+}
+
+// ───── rendering ─────
+function funnel(el,c){const t=ORDER.reduce((a,k)=>a+(c[k]||0),0);
+ el.innerHTML=t?ORDER.filter(k=>c[k]).map(k=>`<div class="${k}" style="width:${c[k]/t*100}%" title="${k}: ${c[k]}">${c[k]/t>.08?(LBL[k]||k)+' '+c[k]:''}</div>`).join(''):'<div style="width:100%;color:var(--mut);font-weight:400">no data yet</div>'}
+
+function detail(r){
+ if(!r){$('det').innerHTML='<span class="mut">Waiting for the first decision…</span>';return}
+ const o=r.output,m=r.meta,lw=o.launch_wallet,mk=o.market;
+ const head=`<div class="row" style="gap:10px"><span class="pill ${o.decision}" style="padding:4px 9px">${o.decision}</span>
+  <span class="sm mut">${o.confidence} confidence · completeness ${Math.round(o.data_completeness*100)}% · stage ${m.stage} · ${(m.elapsed_ms/1000).toFixed(1)} s</span></div>
+  <div style="font-size:17px;font-weight:650;margin-top:8px">$${esc(m.symbol)} <span class="sm mut" style="font-weight:400">${esc(m.name)}</span>
+   <span style="float:right;color:${m.gated||o.decision==='REJECT'?'var(--rej)':bar(m.score)}">${o.risk_score==null?'score —':m.gated?'⛔ gated ('+m.score+')':'score '+o.risk_score}</span></div>
+  <div class="sm"><a href="https://pump.fun/coin/${esc(o.token_address)}" target="_blank">pump.fun</a> · <a href="https://solscan.io/token/${esc(o.token_address)}" target="_blank">token</a> · <a href="https://solscan.io/account/${esc(lw.deployer)}" target="_blank">deployer ${sh(lw.deployer)}</a> · <span class="mut">${esc(m.action)}</span></div>
+  <div class="tabs">${['summary','json','rules'].map(t=>`<button class="${tab===t?'on':''}" onclick="tab='${t}';detail(cur())">${{summary:'Summary',json:'Decision JSON',rules:'All rules'}[t]}</button>`).join('')}</div>`;
+ let body='';
+ if(tab==='summary'){
+  body=`<h2>Weighted score${m.gated?' <span class="r" style="text-transform:none;letter-spacing:0">— a hard gate failed; the score cannot select this coin</span>':''}</h2>`+
+  Object.entries(FL).map(([k,[l,w]])=>{const v=m.factors[k]??0;return `<div class="cat"><span>${l} <span class="dim">${w}%</span></span><div class="track"><div style="width:${v}%;background:${bar(v)}"></div></div><span class="sc">${v}</span></div>`}).join('')+
+  `<h2>Top rejection reasons</h2>`+(o.top_rejection_reasons.length?o.top_rejection_reasons.map(x=>`<div class="reason"><span class="rid s-${x.severity}">${esc(x.rule_id)}</span><div><b>${esc(x.reason)}</b><div class="sm mut">${esc(x.evidence)} · ${x.severity}</div></div></div>`).join(''):'<div class="sm g">None.</div>')+
+  (o.top_selection_reasons.length?`<h2>Selection reasons</h2>`+o.top_selection_reasons.map(x=>`<div class="reason"><span class="rid" style="background:var(--sel)">F${x.factor_id}</span><div><b>${esc(x.factor)}</b> <span class="dim">${x.score}</span><div class="sm mut">${esc(x.evidence)}</div></div></div>`).join(''):'')+
+  `<h2>Launch wallet</h2><div class="kv"><div><span class="mut">Deployer</span><b class="mono">${sh(lw.deployer)}</b></div><div><span class="mut">Funding source</span><b class="mono" title="${esc(lw.funding_source)}">${esc(String(lw.funding_source).length>40?sh(lw.funding_source)+String(lw.funding_source).replace(/^\S+/,''):lw.funding_source)}</b></div>
+   <div><span class="mut">Creator share</span><b>${lw.creator_token_share_pct??'—'}%</b></div><div><span class="mut">Linked clusters</span><b>${lw.linked_wallet_clusters.map(c=>c.type.replace(/_/g,' ').toLowerCase()+' '+c.share_pct+'%').join(', ')||'none'}</b></div>
+   <div><span class="mut">Previous launches</span><b>${lw.previous_launches.length}</b></div><div><span class="mut">Authorities</span><b>${lw.privileged_authorities.join(', ')||'none'}</b></div></div>
+  <h2>Market</h2><div class="kv"><div><span class="mut">Liquidity</span><b>${mk.liquidity_usd!=null?'$'+mk.liquidity_usd.toLocaleString():'—'}</b></div><div><span class="mut">Buy impact</span><b>${mk.buy_price_impact_pct??'—'}%</b></div>
+   <div><span class="mut">Sell impact</span><b>${mk.sell_price_impact_pct??'—'}%</b></div><div><span class="mut">Round-trip cost</span><b>${mk.estimated_round_trip_cost_pct??'—'}%</b></div><div><span class="mut">Sell simulation</span><b>${esc(mk.sell_simulation)}</b></div>
+   <div><span class="mut">Rules checked / triggered</span><b>${o.risk_rules_checked} / ${o.risk_rules_triggered.length}</b></div></div>`+
+  (o.missing_data.length?`<h2>Missing data</h2><div class="sm y">${o.missing_data.map(esc).join(' · ')}</div>`:'');
+ }else if(tab==='json'){
+  body=`<div class="row" style="justify-content:flex-end;margin-bottom:6px"><button onclick="navigator.clipboard.writeText(JSON.stringify(cur().output,null,2));this.textContent='Copied ✓'">Copy JSON</button></div><pre>${esc(JSON.stringify(o,null,2))}</pre>`;
+ }else{
+  const rows=rr[o.token_address];
+  if(!rows){fetch('api/rule-results/'+o.token_address).then(r=>r.json()).then(j=>{rr[o.token_address]=j;detail(cur())});body='<span class="mut">Loading…</span>'}
+  else{const st={};rows.forEach(x=>st[x.rule_id]=x);
+   body=`<div class="sm mut" style="margin-bottom:8px">Stored results (default: everything except PASS). Grey = not applicable / passed.</div><div class="grid">${(RULES||[]).map(rl=>{const x=st[rl.rule_id];const s=x?x.status:'PASS';return `<span class="st-${x?s:'NOT_APPLICABLE'}" title="${esc(rl.rule_id+' · '+rl.title+' · '+s+(x?' · '+(x.evidence.text||''):''))}">${rl.rule_id.slice(1)}</span>`}).join('')}</div>
+   <div class="legend"><span><i class="st-TRIGGERED"></i>triggered</span><span><i class="st-MISSING"></i>missing evidence</span><span><i class="st-NOT_APPLICABLE"></i>pass / n.a.</span></div>
+   <table style="margin-top:10px"><tbody>${rows.filter(x=>x.status!=='PASS').map(x=>`<tr><td class="mono">${x.rule_id}</td><td>${x.status}</td><td>${x.severity}</td><td style="white-space:normal">${esc(x.evidence.text||'')}</td></tr>`).join('')}</tbody></table>`}
+ }
+ $('det').innerHTML=head+body;
+}
+const cur=()=>S?.records.find(r=>r.output.token_address+'|'+r.meta.stage===sel)||S?.records[0];
+
+async function tick(){
+ try{S=await (await fetch('api/status',{cache:'no-store'})).json()}catch(e){$('feed').textContent='bot offline — is "npm start" running?';$('dot').style.background='var(--rej)';return}
+ const live=S.live,br=S.mode==='browser';
+ $('mode').textContent=br?'BROWSER WALLET':live?'LIVE BOT WALLET':'PAPER';$('mode').className='badge '+(br?'b-browser':live?'b-live':'b-paper');
+ $('auto').textContent=(S.paused?'PAUSED · ':'')+(S.autoBuy?'AUTO-BUY ON':'AUTO-BUY OFF');
+ $('connect').style.display=br?'':'none';
+ const up=S.stream.state==='connected';$('dot').style.background=up?'var(--sel)':'var(--wait)';
+ $('feed').textContent=`${S.stream.provider} ${S.stream.state} · RPC p50 ${S.rpc.p50_ms??'—'}ms · ${S.rpc.errors} errors${S.market.rpcLagSlots!=null?' · lag '+S.market.rpcLagSlots+' slots':''} · ${S.db}`;
+ $('tdd').textContent=Math.round(S.trailing*100)+'%';
+ $('k-scan').textContent=S.scanned;$('k-sel').textContent=S.final.SELECT_FOR_REVIEW||0;$('k-rev').textContent=S.inReview;
+ $('k-ms').textContent=S.decisionMs.p50!=null?(S.decisionMs.p50/1000).toFixed(1)+' / '+(S.decisionMs.p90/1000).toFixed(1)+' s':'—';
+ $('k-rug').textContent=S.flags.ruggers+' · '+S.flags.rugFunders;
+ const s3=x=>(x>=0?'+':'')+Number(x).toFixed(3);$('k-pnl').innerHTML=`<span class="${S.pnl.pnl>=0?'g':'r'}">${s3(S.pnl.pnl)}</span> · <span class="${S.pnl.today>=0?'g':'r'}">${s3(S.pnl.today)}</span>`;
+ $('k-wr').textContent=S.pnl.trades+' · '+(S.pnl.trades?Math.round(S.pnl.wins/S.pnl.trades*100):0)+'%';
+ $('k-balc').style.display=S.paper?'':'none';$('k-bal').textContent=Number(S.paperSol).toFixed(3)+' SOL';
+ funnel($('f1'),S.stage1);funnel($('f2'),S.final);
+ renderApprovals(S.approvals);
+ $('pos').innerHTML=S.positions.length?S.positions.map(p=>{const max=Math.max(p.hwm,p.nlv)*1.05||1;return `<tr><td><a href="https://pump.fun/coin/${esc(p.mint)}" target="_blank">$${esc(p.symbol)}</a> <span class="dim sm">${p.mode}</span></td>
+  <td class="${p.status==='EXIT_PENDING'?'r':''}">${p.status}${p.exitReason?` <span class="sm mut" title="${esc(p.exitReason)}">ⓘ</span>`:''}</td><td>${p.venue==='pumpswap'?'PumpSwap':'curve'}</td><td>${f4(p.cost)}</td>
+  <td><div class="row" style="gap:8px"><span>${f4(p.nlv)}</span><div class="dd"><b style="width:${p.nlv/max*100}%;background:${p.nlv>=p.exitAt?'var(--sel)':'var(--rej)'}"></b><i style="left:${p.exitAt/max*100}%"></i></div></div></td>
+  <td>${f4(p.hwm)}</td><td>${f4(p.exitAt)}</td><td class="${p.ddPct>25?'r':p.ddPct>15?'y':''}">${p.ddPct.toFixed(1)}%</td><td class="${p.pnlPct>=0?'g':'r'}">${p.pnlPct>=0?'+':''}${p.pnlPct.toFixed(1)}%</td></tr>`}).join(''):'<tr><td colspan="9" class="mut">No open positions.</td></tr>';
+ const recs=S.records;if(!sel&&recs.length)sel=recs[0].output.token_address+'|'+recs[0].meta.stage;
+ $('decs').innerHTML=recs.length?recs.map(r=>{const o=r.output,k=o.token_address+'|'+r.meta.stage,t=o.top_rejection_reasons[0];
+  return `<div class="dec ${k===sel?'on':''}" data-k="${esc(k)}"><span class="pill ${o.decision}">${LBL[o.decision]||o.decision}</span>
+  <div style="min-width:0"><b>$${esc(r.meta.symbol)}</b> <span class="dim sm">${r.meta.time} · s${r.meta.stage} · ${(r.meta.elapsed_ms/1000).toFixed(1)}s · ${o.confidence}</span>
+  <div class="why">${t?`<b style="color:var(--txt)">${esc(t.rule_id)}</b> ${esc(t.evidence)}`:'all gates passed'} · <span class="dim">${esc(r.meta.action)}</span></div></div>
+  <span class="sc" style="color:${r.meta.gated||o.decision==='REJECT'?'var(--rej)':bar(r.meta.score)}">${r.meta.gated?'⛔':o.risk_score??'—'}</span></div>`}).join(''):'<div style="padding:14px" class="mut">Waiting for launches…</div>';
+ detail(cur());
+ const mx=Math.max(1,...S.ruleHits.map(h=>h.n));
+ $('hits').innerHTML=S.ruleHits.length?S.ruleHits.map(h=>`<div class="cat" style="grid-template-columns:44px 1fr 40px"><span class="rid s-HIGH" style="text-align:center">${esc(h.id)}</span><div><div class="sm">${esc(h.title)}</div><div class="track" style="margin-top:3px"><div style="width:${h.n/mx*100}%;background:var(--rej)"></div></div></div><span class="sc sm">${h.n}</span></div>`).join(''):'<span class="mut">Nothing yet.</span>';
+ $('tr').innerHTML=S.closed.length?S.closed.map(t=>`<tr><td>${esc(String(t.closedAt).slice(11,19))}</td><td><a href="https://pump.fun/coin/${esc(t.mint)}" target="_blank">$${esc(t.symbol)}</a></td><td>${f4(t.cost)}</td><td>${f4(t.proceeds)}</td><td class="${t.pnl>=0?'g':'r'}">${sgn(t.pnl)}</td><td>${f4(t.hwm)}</td><td class="sm" style="white-space:normal">${esc(t.reason)}</td></tr>`).join(''):'<tr><td colspan="7" class="mut">No closed trades yet.</td></tr>';
+ $('flags').innerHTML=S.flags.recent.length?S.flags.recent.map(f=>`<tr><td><a href="https://solscan.io/account/${esc(f.wallet)}" target="_blank" class="mono">${sh(f.wallet)}</a></td><td>${f.flag}</td><td class="sm mut" style="white-space:normal">${esc(f.evidence.reason||('funded rugger '+String(f.evidence.rugger||'').slice(0,6)+'…'))}</td></tr>`).join(''):'<tr><td class="mut">None yet — learned while the bot runs.</td></tr>';
+ $('health').innerHTML=S.health.map(h=>`<tr><td>${esc(h.provider)}</td><td class="${h.status==='OK'?'g':'y'}">${esc(h.status)}</td><td>${h.last_success_at?esc(String(h.last_success_at).slice(11,19)):'—'}</td><td>${h.last_slot??'—'}</td><td>${h.consecutive_failures}</td></tr>`).join('');
+ $('set').innerHTML=Object.entries(S.settings).map(([k,v])=>`<span class="mut">${esc(k)}</span> <b>${esc(v)}</b>`).join(' &nbsp;·&nbsp; ');
+}
+$('decs').onclick=e=>{const d=e.target.closest('.dec');if(!d)return;sel=d.dataset.k;document.querySelectorAll('.dec').forEach(x=>x.classList.toggle('on',x===d));detail(cur())};
+fetch('api/rules').then(r=>r.json()).then(j=>RULES=j.rules).catch(()=>{});
+tick();setInterval(tick,2000);
+</script></body></html>
