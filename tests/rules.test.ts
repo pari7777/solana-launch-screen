@@ -93,3 +93,20 @@ describe("rule library", () => {
     fs.unlinkSync(f);
   });
 });
+
+describe("curves with a non-standard starting price (seen live on pump.fun)", () => {
+  it("uses the on-chain virtual offset for real SOL and never compares against launch-message reserves", async () => {
+    const { realSol } = await import("../src/rules/liquidity");
+    const ev = makeEvidence();
+    // on-chain: virtual 35.82 SOL with 0.000979 real SOL (offset ≈ 35.82, not 30)
+    ev.contract!.curve = { ...ev.contract!.curve, vsol: 35.820213027, rsol: 0.000979196, vtok: 1_072_970_668 };
+    ev.reserves = { vsol: 35.820213027, vtok: 1_072_970_668, at: ev.contract!.fetchedAt };
+    ev.streamAtFetch = null;                                   // only the launch message had (wrong) reserves
+    expect(realSol(ev)).toBeCloseTo(0.000979, 5);
+    const res = evaluateAll(ev, loadRules(""));
+    for (const id of ["R019", "R108", "R119"]) expect(status(res, id), id).toBe("PASS");
+    // a real trade before the read that disagrees wildly is still caught
+    ev.streamAtFetch = { vsol: 5, vtok: 1e9, receivedAt: ev.contract!.fetchedAt - 10 };
+    expect(status(evaluateAll(ev, loadRules("")), "R019")).toBe("TRIGGERED");
+  });
+});

@@ -113,9 +113,11 @@ export class Screener {
   onTrade(t: TradeEvent) {
     const w = this.watch.get(t.mint);
     if (w) {
-      if (!w.price0 && t.vsol && t.vtok && t.wallet === w.launch.deployer) w.price0 = t.vsol / t.vtok;
       w.trades.push(t);
-      if (t.vsol > 0 && t.vtok > 0) w.reserves = { vsol: t.vsol, vtok: t.vtok, at: t.receivedAt };
+      if (!t.fromCreate && t.vsol > 0 && t.vtok > 0) {
+        w.reserves = { vsol: t.vsol, vtok: t.vtok, at: t.receivedAt };
+        if (!w.price0) w.price0 = t.vsol / t.vtok;
+      }
       if (t.side === "buy" && t.wallet !== w.launch.deployer && !w.buyers.has(t.wallet)
           && w.buyers.size < config.traceBuyers && t.sol >= config.minTraceSol)
         w.buyers.set(t.wallet, track(this.tracer.trace(t.wallet)));
@@ -195,6 +197,11 @@ export class Screener {
       const f = this.store.flagsOf(x); if (!f) return null;
       return f.has("RUGGER") ? "is a known rugger" : f.has("RUG_FUNDER") ? "funded a known rugger" : null;
     };
+    // Reserves: newest of (a real trade event, the on-chain curve). Launch-message figures are never used.
+    if (contract && (!w.reserves || w.reserves.at < contract.fetchedAt) && contract.curve.vsol > 0 && contract.curve.vtok > 0) {
+      w.reserves = { vsol: contract.curve.vsol, vtok: contract.curve.vtok, at: contract.fetchedAt };
+    }
+    if (!w.price0 && w.reserves) w.price0 = w.reserves.vsol / w.reserves.vtok;
     const graph = buildFundingGraph(l.deployer, deployerTrace, buyerTraces, isFlagged);
     const risk = clusterRisk(l.deployer, l.receivedAt, w.price0, w.trades, graph, buyerTraces, { bundleMs: param("R043", "bundle_ms", 600), dustSol: 0.01 });
     const venue = contract?.curve.complete ? "pumpswap" : "pump_bonding_curve";
@@ -208,6 +215,7 @@ export class Screener {
       contract, contractError: w.contract.s.error ?? (w.contract.s.done ? null : "pending"),
       activeExtensions: contract ? activeExtensions(contract.mint) : null,
       reserves: w.reserves, quote: q, feePct: fee, risk, graph,
+      streamAtFetch: contract ? [...w.trades].reverse().find((t) => !t.fromCreate && t.vsol > 0 && t.receivedAt <= contract.fetchedAt) ?? null : null,
       deployerTrace, deployerTraceError: w.deployer.s.error ?? (w.deployer.s.done ? null : "pending"),
       buyerTracesNeeded: Math.min(config.traceBuyers, eligible.size), buyerTracesDone: buyerTraces.size,
       history: {

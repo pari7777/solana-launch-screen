@@ -11,7 +11,12 @@ const curveState = (ev: Evidence) => ({
   real_sol: realSol(ev), complete: ev.contract?.curve.complete ?? null,
 });
 /** Real SOL in the curve = virtual SOL − the 30 virtual SOL every pump.fun curve starts with (stream reserves are fresher). */
-export const realSol = (ev: Evidence) => (ev.reserves ? Math.max(0, ev.reserves.vsol - INITIAL_VSOL) : ev.contract?.curve.rsol ?? null);
+export const realSol = (ev: Evidence) => {
+  // virtual SOL = real SOL + a fixed per-curve offset (30 on classic curves; newer curves vary), so read the offset from chain
+  const offset = ev.contract ? ev.contract.curve.vsol - ev.contract.curve.rsol : INITIAL_VSOL;
+  if (ev.reserves) return Math.max(0, ev.reserves.vsol - offset);
+  return ev.contract?.curve.rsol ?? null;
+};
 
 const unobservable = (label: string, why: string): Evaluator => ({ requires: [label], fn: () => missing([label], why) });
 
@@ -48,11 +53,13 @@ export const liquidityEvaluators: Record<string, Evaluator> = {
                                                : pass(`exit price impact ${ev.quote!.sellImpactPct}%`);
   } },
   reserves_disagree: { requires: ["onchain_vsol", "stream_vsol"], fn: (ev, p) => {
-    if (!ev.contract || !ev.reserves) return missing([...(ev.contract ? [] : ["contract_accounts"]), ...(ev.reserves ? [] : ["pool_reserves"])]);
-    const a = ev.contract.curve.vsol, b = ev.reserves.vsol;
+    if (!ev.contract) return missing(["contract_accounts"]);
+    const t = ev.streamAtFetch;
+    if (!t) return pass("no trade event before the on-chain read to compare against");
+    const a = ev.contract.curve.vsol, b = t.vsol;
     const diff = Math.abs(a - b) / Math.max(b, 1e-9) * 100;
-    return diff > p.max_diff_pct ? trig(`on-chain reserves ${a.toFixed(2)} SOL vs stream ${b.toFixed(2)} SOL (${diff.toFixed(0)}% apart)`, { onchain_vsol: a, stream_vsol: b })
-                                 : pass(`on-chain and stream reserves agree (${diff.toFixed(1)}%)`);
+    return diff > p.max_diff_pct ? trig(`on-chain reserves ${a.toFixed(2)} SOL vs trade stream ${b.toFixed(2)} SOL (${diff.toFixed(0)}% apart)`, { onchain_vsol: a, stream_vsol: b })
+                                 : pass(`on-chain and trade-stream reserves agree (${diff.toFixed(1)}%)`);
   } },
   price_source_invalid: { requires: ["curve_or_pool_state"], fn: (ev) => {
     if (!ev.contract) return missing(["contract_accounts"]);

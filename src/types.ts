@@ -34,6 +34,7 @@ export interface TradeEvent {
   vtok: number;
   receivedAt: number;
   source: "rpc" | "pumpportal" | "replay";
+  fromCreate?: boolean;      // built from a launch message, whose reserve figures are not trustworthy
 }
 
 export interface MintInfo {

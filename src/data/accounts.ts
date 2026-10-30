@@ -66,7 +66,7 @@ export async function fetchContract(rpc: Rpc, mint: string, curveKey?: string): 
       const cd = Buffer.from(c.data[0], "base64");
       const info: ContractInfo = { mint: decodeMint(Buffer.from(a.data[0], "base64"), a.owner),
         curve: decodeCurve(cd, c.owner), curveKey: ck, fetchedAt: Date.now() };
-      if (diag < 12 && process.env.CURVE_DIAG !== "off") {
+      if (diag < 12 && process.env.CURVE_DIAG === "on") {
         diag++;
         console.log(`[curve-diag] mint=${mint} curveKey=${ck} pda=${bondingCurvePda(mint)} owner=${c.owner} len=${cd.length} ` +
           `u64s=${[8, 16, 24, 32, 40].map((o) => cd.length >= o + 8 ? cd.readBigUInt64LE(o).toString() : "-").join(",")} ` +

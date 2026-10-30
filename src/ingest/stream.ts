@@ -87,12 +87,12 @@ export class LaunchStream {
         if (m.txType === "create" && m.mint && this.dedupe.first(`c:${m.signature}:0`)) {
           this.h.onLaunch({ signature: m.signature, instructionIndex: 0, slot: 0, mint: m.mint, deployer: m.traderPublicKey ?? "",
             creator: m.traderPublicKey ?? "", bondingCurve: m.bondingCurveKey ?? "", name: m.name ?? "", symbol: m.symbol ?? "",
-            uri: m.uri ?? "", vsol: num(m.vSolInBondingCurve), vtok: num(m.vTokensInBondingCurve), receivedAt: now, source: "pumpportal" });
+            uri: m.uri ?? "", vsol: undefined, vtok: undefined, receivedAt: now, source: "pumpportal" });   // reserves come from chain
           // PumpPortal reports the creator's first buy inside the create message
           if (Number(m.initialBuy) > 0 && this.dedupe.first(`t:${m.signature}:dev`))
             this.h.onTrade({ signature: m.signature, eventIndex: 0, slot: 0, mint: m.mint, wallet: m.traderPublicKey, side: "buy",
               sol: num(m.solAmount) ?? 0, tokens: Number(m.initialBuy), vsol: num(m.vSolInBondingCurve) ?? 0,
-              vtok: num(m.vTokensInBondingCurve) ?? 0, receivedAt: now, source: "pumpportal" });
+              vtok: num(m.vTokensInBondingCurve) ?? 0, receivedAt: now, source: "pumpportal", fromCreate: true });
         } else if ((m.txType === "buy" || m.txType === "sell") && m.mint) {
           const key = `t:${m.signature}:${m.mint}:${m.traderPublicKey}:${m.tokenAmount}`;
           if (!this.dedupe.first(key)) return;

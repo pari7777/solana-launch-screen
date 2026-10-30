@@ -132,6 +132,7 @@ export function decide(ev: Evidence, results: RuleResult[], autoBuyAllowed: (d: 
 }
 
 function realSol(ev: Evidence) {
-  if (ev.reserves) return Math.max(0, ev.reserves.vsol - INITIAL_VSOL);
+  const offset = ev.contract ? ev.contract.curve.vsol - ev.contract.curve.rsol : INITIAL_VSOL;
+  if (ev.reserves) return Math.max(0, ev.reserves.vsol - offset);
   return ev.contract ? ev.contract.curve.rsol : null;
 }

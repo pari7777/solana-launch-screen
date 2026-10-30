@@ -45,7 +45,7 @@ export function clusterRisk(deployer: string, launchAt: number, price0: number |
   const fresh = traced.filter((t) => !t.old && (t.ageHours < 1 || t.txCount < 5)).length;
   const wash = [...counts.entries()].filter(([w, c]) => w !== deployer && c.buy && c.sell && c.buy + c.sell >= 3).map(([w]) => w);
   const totVol = [...counts.values()].reduce((a, c) => a + c.vol, 0) || 1;
-  const prices = trades.filter((t) => t.vsol > 0 && t.vtok > 0).map((t) => t.vsol / t.vtok);
+  const prices = trades.filter((t) => !t.fromCreate && t.vsol > 0 && t.vtok > 0).map((t) => t.vsol / t.vtok);
   const all = price0 ? [price0, ...prices] : prices;
   return {
     holders, buyers, sellers, solIn: buySol,

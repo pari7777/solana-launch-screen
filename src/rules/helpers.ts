@@ -13,6 +13,7 @@ export interface Evidence {
   contractError: string | null;
   activeExtensions: { type: number; name: string; detail?: string }[] | null;
   reserves: { vsol: number; vtok: number; at: number } | null;
+  streamAtFetch?: { vsol: number; vtok: number; receivedAt: number } | null;   // last real trade before the on-chain read
   quote: Quote | null;
   feePct: number;
   risk: ClusterRisk;
