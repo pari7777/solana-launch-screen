@@ -107,7 +107,7 @@ const rows: Row[] = [
   ["R076", G, "HIGH", "round_trip_uneconomic", "REJECT", "WAIT", "liquidity", "Round-trip cost unacceptable", { max_pct: 8 }],
   ["R077", G, "MEDIUM", "volume_unreconciled", "REJECT", "IGNORE", "buyers", "Reported volume fabricated"],
   ["R078", G, "HIGH", "wash_trading", "REJECT", "IGNORE", "buyers", "Coordinated wash trading dominates", { min_wallets: 2, min_share: 0.4 }],
-  ["R079", G, "HIGH", "cluster_controls_liquidity", "REJECT", "WAIT", "liquidity", "One cluster controls executable liquidity", { max_ratio: 0.8 }],
+  ["R079", G, "HIGH", "cluster_controls_liquidity", "REJECT", "WAIT", "liquidity", "One cluster controls executable liquidity", { max_ratio: 0.5, min_others_sol: 0.5 }],
   ["R080", G, "HIGH", "quote_stale", "REJECT", "WAIT", "liquidity", "Quoted price stale and unrefreshable", { stale_ms: 15000 }],
   ["R081", G, "HIGH", "dump_stress_exit_loss", "REJECT", "WAIT", "liquidity", "Order breaches the loss budget", { max_loss_pct: 60 }],
   ["R082", G, "HIGH", "migration_complete", "REJECT", "WAIT", "liquidity", "Launch mechanism restricts the exit"],

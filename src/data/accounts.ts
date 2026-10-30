@@ -56,15 +56,24 @@ export function activeExtensions(m: MintInfo) {
   return out;
 }
 
+let diag = 0;
 export async function fetchContract(rpc: Rpc, mint: string, curveKey?: string): Promise<ContractInfo> {
   const ck = curveKey || bondingCurvePda(mint);
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await rpc.call<any>("getMultipleAccounts", [[mint, ck], { encoding: "base64", commitment: "processed" }]);
     const [a, c] = res.value;
-    if (a && c) return {
-      mint: decodeMint(Buffer.from(a.data[0], "base64"), a.owner),
-      curve: decodeCurve(Buffer.from(c.data[0], "base64"), c.owner), curveKey: ck, fetchedAt: Date.now(),
-    };
+    if (a && c) {
+      const cd = Buffer.from(c.data[0], "base64");
+      const info: ContractInfo = { mint: decodeMint(Buffer.from(a.data[0], "base64"), a.owner),
+        curve: decodeCurve(cd, c.owner), curveKey: ck, fetchedAt: Date.now() };
+      if (diag < 12 && process.env.CURVE_DIAG !== "off") {
+        diag++;
+        console.log(`[curve-diag] mint=${mint} curveKey=${ck} pda=${bondingCurvePda(mint)} owner=${c.owner} len=${cd.length} ` +
+          `u64s=${[8, 16, 24, 32, 40].map((o) => cd.length >= o + 8 ? cd.readBigUInt64LE(o).toString() : "-").join(",")} ` +
+          `complete=${cd[48]} mintOwner=${a.owner} supply=${info.mint.supplyRaw} dec=${info.mint.decimals} ext=${info.mint.extensions.map((e) => e.type).join("|")}`);
+      }
+      return info;
+    }
     await new Promise((r) => setTimeout(r, 350));
   }
   throw new Error("mint or curve account not visible yet");

@@ -14,6 +14,7 @@ export interface ClusterRisk {
   swingPct: number | null; dropFromLaunchPct: number | null;
   linkedSelling: string[]; bundleSelling: string[];
   clusterTokens: number;
+  solIn: Map<string, number>;
 }
 
 const pct = (t: number) => Math.round((t / TOTAL_SUPPLY) * 100 * 100) / 100;
@@ -47,7 +48,7 @@ export function clusterRisk(deployer: string, launchAt: number, price0: number |
   const prices = trades.filter((t) => t.vsol > 0 && t.vtok > 0).map((t) => t.vsol / t.vtok);
   const all = price0 ? [price0, ...prices] : prices;
   return {
-    holders, buyers, sellers,
+    holders, buyers, sellers, solIn: buySol,
     deployerPct: pct(holders.get(deployer) ?? 0),
     top10Pct: pct(ranked.slice(0, 10).reduce((a, [, v]) => a + v, 0)),
     top1Pct: others.length ? pct(others[0][1]) : 0, top1Wallet: others[0]?.[0] ?? null,

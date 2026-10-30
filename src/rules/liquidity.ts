@@ -92,13 +92,22 @@ export const liquidityEvaluators: Record<string, Evaluator> = {
       ? trig(`if the creator + linked wallets sell first, the exit loses ${ev.quote!.clusterDumpLossPct}%`, { cluster_dump_loss_pct: ev.quote!.clusterDumpLossPct, cluster_pct: ev.risk.insiderPct })
       : pass(`insider-cluster dump stress ${ev.quote!.clusterDumpLossPct}%`);
   } },
-  cluster_controls_liquidity: { requires: ["cluster_exit_sol", "real_sol"], fn: (ev, p) => {
+  cluster_controls_liquidity: { requires: ["cluster_extract_sol", "others_sol"], fn: (ev, p) => {
+    // How much of OTHER buyers' SOL the deployer + linked wallets could pull out by selling everything.
+    // (The deployer always buys first, so "can withdraw most real SOL" is true of every new coin and proves nothing.)
     const m = needQuote(ev); if (m) return m;
-    const rs = realSol(ev);
-    if (!rs) return pass("no real SOL yet to control");
+    const rs = realSol(ev); if (!rs) return pass("no real SOL yet");
+    const cluster = new Set([ev.launch.deployer, ...ev.graph.linked, ...ev.graph.clustered]);
+    const clusterIn = ev.risk.buyers.concat([ev.launch.deployer]).filter((w, i, a) => a.indexOf(w) === i && cluster.has(w))
+      .reduce((a, w) => a + (ev.risk.solIn.get(w) ?? 0), 0);
+    const othersSol = Math.max(0, rs - clusterIn);
+    if (othersSol < (p.min_others_sol ?? 0.5)) return pass(`only ${othersSol.toFixed(2)} SOL from independent buyers so far`);
     const out = sellOut(ev.reserves!.vsol, ev.reserves!.vtok, ev.risk.clusterTokens, ev.feePct).sol;
-    return out / rs >= p.max_ratio ? trig(`creator cluster could withdraw ${(out / rs * 100).toFixed(0)}% of the real SOL in the curve`, { cluster_exit_sol: out, real_sol: rs })
-                                   : pass(`creator cluster could withdraw ${(out / rs * 100).toFixed(0)}% of real SOL`);
+    const extract = Math.max(0, out - clusterIn);
+    const ratio = extract / othersSol;
+    const e = { cluster_extract_sol: Math.round(extract * 1e4) / 1e4, others_sol: Math.round(othersSol * 1e4) / 1e4 };
+    return ratio >= p.max_ratio ? trig(`deployer cluster could take ${(ratio * 100).toFixed(0)}% of other buyers' SOL`, e)
+                                : pass(`deployer cluster could take ${(ratio * 100).toFixed(0)}% of other buyers' SOL`, e);
   } },
   quote_stale: { requires: ["quote_age_ms"], fn: (ev, p) => {
     if (!ev.reserves) return missing(["pool_reserves"]);
