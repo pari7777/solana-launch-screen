@@ -45,7 +45,16 @@ export class PositionManager {
   constructor(private store: Store, private rpc: Rpc, private exec: Executor | null, private wallet: string | null) {}
 
   async load() {
-    this.paperSol = await this.store.get("paper_sol", config.paperStartSol);
+    // Changing PAPER_START_SOL starts a fresh paper account at that balance.
+    const lastStart = await this.store.get<number | null>("paper_start_sol", null);
+    if (lastStart !== config.paperStartSol) {
+      this.paperSol = config.paperStartSol;
+      await this.store.put("paper_sol", this.paperSol);
+      await this.store.put("paper_start_sol", config.paperStartSol);
+      if (lastStart !== null) console.log(`Paper balance reset: ${lastStart} → ${config.paperStartSol} SOL (PAPER_START_SOL changed)`);
+    } else {
+      this.paperSol = await this.store.get("paper_sol", config.paperStartSol);
+    }
     this.todayPnl = (await this.store.pnlSummary()).today;
     for (const r of await this.store.openPositions()) {
       const p: Position = { mint: r.mint, symbol: r.symbol, mode: r.mode, wallet: r.wallet, status: r.status, venue: r.venue,
