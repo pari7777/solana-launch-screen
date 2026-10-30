@@ -1,6 +1,7 @@
 /**
  * Live state of one launched token, built from its Transfer and Swap events:
  * holder balances, buys and sells per wallet (with ETH amounts), and price history.
+ * When the coin is paired with something other than ETH, `ethRate` converts the paired side to ETH.
  */
 import { formatEther } from "viem";
 import { ADDR, INFRA, lc } from "../config";
@@ -18,14 +19,19 @@ export class TokenState {
   private seen = new Set<string>();
   private pendingTransfers: TokenTransfer[] = [];
 
-  constructor(readonly token: string, readonly tokenIsCurrency0: boolean, readonly ignore: Set<string>) {}
+  ethRate = 1;                                   // ETH-wei per raw unit of the paired currency
+  private routers: Set<string>;
 
-  isHolder = (a: string) => !INFRA.has(a) && !this.ignore.has(a) && a !== lc(this.token);
+  constructor(readonly token: string, readonly tokenIsCurrency0: boolean, readonly ignore: Set<string>, extraRouters: string[] = []) {
+    this.routers = new Set([...ROUTERS, ...extraRouters.map(lc)]);
+  }
+
+  isHolder = (a: string) => !INFRA.has(a) && !this.ignore.has(a) && !this.routers.has(a) && a !== lc(this.token);
 
   addSwaps(s: PoolSwap[]) {
     for (const x of s) {
       this.swapsByTx.set(x.tx, x);
-      this.prices.push({ at: x.at, p: ethPerToken(x.sqrtPriceX96, this.tokenIsCurrency0) });
+      this.prices.push({ at: x.at, p: ethPerToken(x.sqrtPriceX96, this.tokenIsCurrency0) * this.ethRate });
     }
     // transfers that arrived before their swap can now be priced
     const pend = this.pendingTransfers; this.pendingTransfers = [];
@@ -43,15 +49,23 @@ export class TokenState {
 
   private applyTrades(ts: TokenTransfer[]) {
     for (const t of ts) {
-      const buy = ROUTERS.has(t.from) && this.isHolder(t.to);
-      const sell = ROUTERS.has(t.to) && this.isHolder(t.from);
+      const buy = this.routers.has(t.from) && this.isHolder(t.to);
+      const sell = this.routers.has(t.to) && this.isHolder(t.from);
       if (!buy && !sell) continue;
       const s = this.swapsByTx.get(t.tx);
       if (!s) { if (!this.pendingTransfers.some((p) => p.tx === t.tx && p.logIndex === t.logIndex)) this.pendingTransfers.push(t); continue; }
       const ethLeg = this.tokenIsCurrency0 ? s.amount1 : s.amount0;
       this.trades.push({ tx: t.tx, block: t.block, wallet: buy ? t.to : t.from, side: buy ? "buy" : "sell", tokens: n(t.amount),
-                         eth: n(ethLeg), priceEth: ethPerToken(s.sqrtPriceX96, this.tokenIsCurrency0), at: t.at });
+                         eth: n(ethLeg) * this.ethRate, priceEth: ethPerToken(s.sqrtPriceX96, this.tokenIsCurrency0) * this.ethRate, at: t.at });
     }
+  }
+
+  /** The paired currency's ETH value became known: re-price what was recorded so far. */
+  setEthRate(r: number) {
+    if (!(r > 0) || r === this.ethRate) return;
+    const k = r / this.ethRate; this.ethRate = r;
+    for (const t of this.trades) { t.eth *= k; if (t.priceEth !== null) t.priceEth *= k; }
+    for (const x of this.prices) x.p *= k;
   }
 
   /** Transfers that moved tokens to a wallet without a swap (dev buy via extension, airdrops, direct sends). */

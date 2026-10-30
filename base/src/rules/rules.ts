@@ -9,7 +9,7 @@ type Row = [id: string, category: string, severity: Severity, condition: string,
             on_missing: RuleDef["on_missing_evidence"], factor: Factor, title: string,
             params?: Record<string, number>, applies?: Venue[], evidence?: string[]];
 
-export const LAUNCH_VENUES: Venue[] = ["clanker_v4"];
+export const LAUNCH_VENUES: Venue[] = ["launch_v4"];
 const SIGNING: Venue[] = ["signing"];
 
 const A = "contract_permissions", B = "liquidity_exit", Cw = "creator_wallets", D = "early_buyers", E = "distribution",

@@ -21,6 +21,10 @@ export const config = {
   databaseUrl: env("DATABASE_URL", ""),
   dataDir: env("DATA_DIR", "./data"),
 
+  // ── launch platforms (comma list): clanker, zora, flaunch, doppler ──
+  platforms: list("PLATFORMS", "clanker,zora,flaunch,doppler").map((x) => x.toLowerCase()),
+  maxInReview: num("MAX_IN_REVIEW", 30),          // launches screened at once; extra ones are counted, not screened
+
   // ── screening timeline ──
   decisionSeconds: num("DECISION_SECONDS", 6),
   observeSeconds: num("OBSERVE_SECONDS", 3),
@@ -68,7 +72,7 @@ export const config = {
 export const ADDR = {
   clankerFactory: "0xE85A59c628F7d27878ACeB4bf3b35733630083a9",
   poolManager: "0x498581fF718922c3f8e6A244956aF099B2652b2b",
-  quoter: "0xE1A6C5803e3c44368b171BD680c7D32dfc92CA47",
+  quoter: "0x0d5e0f971ed27fbff6c2837bf31316121532048d",
   stateView: "0xa3c0c9b65bad0b08107aa264b0f3db444b867a71",
   universalRouter: "0x6fF5693b99212Da76ad316178A184AB56D299b43",
   permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
@@ -89,6 +93,39 @@ export const ADDR = {
                "0xd60D6B218116cFd801E28F78d011a203D2b068Cc", "0xb429d62f8f3bFFb98CdB9569533eA23bF0Ba28CC"],
 };
 
+/** Other Base launchpads. Sources: Zora docs (factory), @flaunch/sdk and @whetstone-research/doppler-sdk address books. */
+export const PLATFORM_ADDR = {
+  zoraFactory: "0x777777751622c0d3258f214F9DF38E35BF45baF3",
+  zoraToken: "0x1111111111166b7FE7bd91427724B487980aFc69",
+  flETH: "0x000000000D564D5be76f7f0d28fE52605afC7Cf8",
+  // Flaunch hooks (every generation still serves its own pools); PoolCreated is emitted by these
+  flaunchPositionManagers: ["0x51Bba15255406Cfe7099a42183302640ba7dAFDC", "0xf785bb58059fab6fb19bdda2cb9078d9e546efdc",
+    "0x23321f11a6d44fd1ab790044fdfde5758c902fdc", "0x588c683ecc450f8b2aadb13d7f63792b840425dc",
+    "0x8DC3b85e1dc1C846ebf3971179a751896842e5dC", "0x6ea0edee449a287504990df8d87951b9436825dc", "0xE753a351FB498051a09Dc130fcC29aEBc76525DC"],
+  flaunchInfra: ["0x1B8065a099AdcD7aa7c5e241e3596B56ec98bA5a", "0xCc7A4A00072ccbeEEbd999edc812C0ce498Fb63B", "0x4dc442403e8c758425b93C59Dc737da522f32640",
+    "0x66681f10BA90496241A25e33380004f30Dfd8aa8", "0x7f22353d1634223a802D1c1Ea5308Ddf5DD0ef9c", "0x0dae90b70f62ce3b1d5278f4763bd1f595d6a687",
+    "0x2154c604df568A5285284D1c4918DC98C39240df", "0x9d58ca8011096ad711babf0d990c45b9d5bb047d", "0x72e6f7948b1B1A343B477F39aAbd2E35E6D27dde",
+    "0x17fbf54d6d15ebff82eee77e616f701952d08bb4", "0x39112541720078c70164EA4Deb61F0A4811910F9", "0xf787d757674b21efd713fb636b16ed994bfa82a8",
+    "0x68d967d25806fef4aa134db031cdcc55d3e20f92", "0xfE616a9c723f5fB35728C7ccCb84dB034A18cC86", "0x9E433F32bb5481a9CA7DFF5b3af74A7ed041a888"],
+  dopplerAirlock: "0x660eAaEdEBc968f8f3694354FA8EC0b4c5Ba8D12",
+  // Doppler initializers / hooks that create Uniswap v4 pools (multicurve, scheduled, decay, dynamic auction, hook initializers)
+  dopplerV4: ["0xFDFD7D27089f306eEF279b5DA6BFe878250cB6bb", "0x65dE470Da664A5be139A5D812bE5FDa0d76CC951", "0xA36715dA46Ddf4A769f3290f49AF58bF8132ED8E",
+    "0xD59cE43E53D69F190E15d9822Fb4540dCcc91178", "0xBDF938149ac6a781F94FAa0ed45E6A0e984c6544", "0xe2AEbc987592593b667ec29178D0A83929Db78b6"],
+  dopplerInfra: ["0xf0B5141dD9096254B2ca624dff26024f46087229", "0x16F5ACB64F4FA17296E942C51d3395aDC318f9e1", "0xaA47D2977d622DBdFD33eeF6a8276727c52EB4e5",
+    "0x5F3bA43D44375286296Cb85F1EA2EBfa25dde731", "0xd3B4cF7FD24381e90A4F012fC6c5976b87B9B3cE", "0xa1b06BE4f2fC347d194240D79EDa9F40CCAd9732",
+    "0xD6FECFF347c6203A41874e8D77dE669B54e7A500", "0x0A00775D71a42cd33D62780003035e7F5b47bD3A"],
+  v3Quoter: "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",     // Uniswap QuoterV2 on Base
+};
+export type PlatformId = "clanker" | "zora" | "flaunch" | "doppler";
+export const PLATFORM_LABEL: Record<PlatformId, string> = { clanker: "Clanker", zora: "Zora", flaunch: "Flaunch", doppler: "Doppler / Bankr" };
+/** Default supply when the token cannot be read (only used for % maths). */
+export const DEFAULT_SUPPLY: Record<PlatformId, number> = { clanker: 100_000_000_000, zora: 1_000_000_000, flaunch: 100_000_000_000, doppler: 1_000_000_000 };
+
 export const lc = (a: string) => a.toLowerCase();
+export const ZERO = "0x0000000000000000000000000000000000000000";
+/** Currencies worth exactly 1 ETH: native ETH (v4 address 0), WETH, Flaunch's flETH. */
+export const ETH_LIKE = new Set([ZERO, ADDR.weth, PLATFORM_ADDR.flETH].map(lc));
 export const INFRA = new Set([ADDR.poolManager, ADDR.universalRouter, ADDR.permit2, ADDR.clankerFactory, ...ADDR.clankerInfra,
-                              "0x0000000000000000000000000000000000000000", "0x000000000000000000000000000000000000dEaD"].map(lc));
+                              PLATFORM_ADDR.zoraFactory, ...PLATFORM_ADDR.flaunchPositionManagers, ...PLATFORM_ADDR.flaunchInfra,
+                              PLATFORM_ADDR.dopplerAirlock, ...PLATFORM_ADDR.dopplerV4, ...PLATFORM_ADDR.dopplerInfra,
+                              ZERO, "0x000000000000000000000000000000000000dEaD"].map(lc));

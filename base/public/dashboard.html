@@ -59,7 +59,7 @@ th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-
  <div class="row"><h1>🔵 Base Launch Screen</h1><span id="mode" class="badge b-paper">PAPER</span><span id="auto" class="badge" style="background:var(--card2);color:var(--mut)"></span></div>
  <div class="row"><span class="sm mut"><span id="dot" class="dot" style="background:var(--wait)"></span><span id="feed">connecting…</span></span></div>
 </div>
-<div class="sm mut" style="margin-top:4px">Base · Clanker v4 (Uniswap v4) · 120-rule screen in the first <span id="dl">6</span> s · paper trading</div>
+<div class="sm mut" style="margin-top:4px">Base · <span id="plats">Clanker · Zora · Flaunch · Doppler/Bankr</span> (Uniswap v4) · 120-rule screen in the first <span id="dl">6</span> s · paper trading</div>
 
 <div id="apprBox" style="display:none"><h2>Waiting for your wallet</h2><div class="card" id="appr"></div></div>
 
@@ -102,6 +102,12 @@ th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-
 </div>
 
 <script>
+function coinUrl(pl,t){t=encodeURIComponent(t);pl=String(pl||'').toLowerCase();
+ if(pl.startsWith('clanker'))return `https://www.clanker.world/clanker/${t}`;
+ if(pl.startsWith('zora'))return `https://zora.co/coin/base:${t}`;
+ if(pl.startsWith('flaunch'))return `https://flaunch.gg/base/coin/${t}`;
+ return `https://dexscreener.com/base/${t}`;}
+
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sh=a=>a?esc(String(a).slice(0,4)+'…'+String(a).slice(-4)):'—';
@@ -127,7 +133,7 @@ function detail(r){
   <span class="sm mut">${o.confidence} confidence · completeness ${Math.round(o.data_completeness*100)}% · stage ${m.stage} · ${(m.elapsed_ms/1000).toFixed(1)} s</span></div>
   <div style="font-size:17px;font-weight:650;margin-top:8px">$${esc(m.symbol)} <span class="sm mut" style="font-weight:400">${esc(m.name)}</span>
    <span style="float:right;color:${m.gated||o.decision==='REJECT'?'var(--rej)':bar(m.score)}">${o.risk_score==null?'score —':m.gated?'⛔ gated ('+m.score+')':'score '+o.risk_score}</span></div>
-  <div class="sm"><a href="https://www.clanker.world/clanker/${esc(o.token_address)}" target="_blank">clanker</a> · <a href="https://basescan.org/token/${esc(o.token_address)}" target="_blank">token</a> · <a href="https://basescan.org/address/${esc(lw.deployer)}" target="_blank">deployer ${sh(lw.deployer)}</a> · <span class="mut">${esc(m.action)}</span></div>
+  <div class="sm"><a href="${coinUrl(r.meta.platform,o.token_address)}" target="_blank">${esc((r.meta.platform||'chart').split(' ')[0].toLowerCase())}</a> · <a href="https://basescan.org/token/${esc(o.token_address)}" target="_blank">token</a> · <a href="https://basescan.org/address/${esc(lw.deployer)}" target="_blank">deployer ${sh(lw.deployer)}</a> · <span class="mut">${esc(m.action)}</span></div>
   <div class="tabs">${['summary','json','rules'].map(t=>`<button class="${tab===t?'on':''}" onclick="tab='${t}';detail(cur())">${{summary:'Summary',json:'Decision JSON',rules:'All rules'}[t]}</button>`).join('')}</div>`;
  let body='';
  if(tab==='summary'){
@@ -164,7 +170,7 @@ async function tick(){
   const up=S.stream.state==='connected';$('dot').style.background=up?'var(--sel)':'var(--wait)';
  $('feed').textContent=`${S.stream.provider} ${S.stream.state} · RPC p50 ${S.rpc.p50_ms??'—'}ms · ${S.rpc.errors} errors${S.market.rpcLagSlots!=null?' · lag '+S.market.rpcLagSlots+' blocks':''} · ${S.db}`;
  $('tdd').textContent=Math.round(S.trailing*100)+'%';
- $('k-scan').textContent=S.scanned;$('k-sel').textContent=S.final.SELECT_FOR_REVIEW||0;$('k-rev').textContent=S.inReview;
+ $('k-scan').textContent=S.scanned;if(S.byPlatform){const b=Object.entries(S.byPlatform).map(([k,v])=>`${k} ${v}`).join(' · ');$('k-scan').title=b+(S.overflow?` · ${S.overflow} not screened (busy)`:'');}if(S.platforms)$('plats').textContent=S.platforms.join(' · ');$('k-sel').textContent=S.final.SELECT_FOR_REVIEW||0;$('k-rev').textContent=S.inReview;
  $('k-ms').textContent=S.decisionMs.p50!=null?(S.decisionMs.p50/1000).toFixed(1)+' / '+(S.decisionMs.p90/1000).toFixed(1)+' s':'—';
  $('k-rug').textContent=S.flags.ruggers+' · '+S.flags.rugFunders;
  const s3=x=>(x>=0?'+':'')+Number(x).toFixed(3);$('k-pnl').innerHTML=`<span class="${S.pnl.pnl>=0?'g':'r'}">${s3(S.pnl.pnl)}</span> · <span class="${S.pnl.today>=0?'g':'r'}">${s3(S.pnl.today)}</span>`;
@@ -172,8 +178,8 @@ async function tick(){
  $('k-balc').style.display=S.paper?'':'none';$('k-bal').textContent=Number(S.paperSol).toFixed(4)+' ETH';
  funnel($('f1'),S.stage1);funnel($('f2'),S.final);
  renderApprovals(S.approvals);
- $('pos').innerHTML=S.positions.length?S.positions.map(p=>{const max=Math.max(p.hwm,p.nlv)*1.05||1;return `<tr><td><a href="https://www.clanker.world/clanker/${esc(p.mint)}" target="_blank">$${esc(p.symbol)}</a> <span class="dim sm">${p.mode}</span></td>
-  <td class="${p.status==='EXIT_PENDING'?'r':''}">${p.status}${p.exitReason?` <span class="sm mut" title="${esc(p.exitReason)}">ⓘ</span>`:''}</td><td>${esc(p.platform||'Clanker')}</td><td>${f4(p.cost)}</td>
+ $('pos').innerHTML=S.positions.length?S.positions.map(p=>{const max=Math.max(p.hwm,p.nlv)*1.05||1;return `<tr><td><a href="${coinUrl(p.platform,p.mint)}" target="_blank">$${esc(p.symbol)}</a> <span class="dim sm">${p.mode}</span></td>
+  <td class="${p.status==='EXIT_PENDING'?'r':''}">${p.status}${p.exitReason?` <span class="sm mut" title="${esc(p.exitReason)}">ⓘ</span>`:''}</td><td>${esc(p.platform||'—')}</td><td>${f4(p.cost)}</td>
   <td><div class="row" style="gap:8px"><span>${f4(p.nlv)}</span><div class="dd"><b style="width:${p.nlv/max*100}%;background:${p.nlv>=p.exitAt?'var(--sel)':'var(--rej)'}"></b><i style="left:${p.exitAt/max*100}%"></i></div></div></td>
   <td>${f4(p.hwm)}</td><td>${f4(p.exitAt)}</td><td class="${p.ddPct>25?'r':p.ddPct>15?'y':''}">${p.ddPct.toFixed(1)}%</td><td class="${p.pnlPct>=0?'g':'r'}">${p.pnlPct>=0?'+':''}${p.pnlPct.toFixed(1)}%</td></tr>`}).join(''):'<tr><td colspan="9" class="mut">No open positions.</td></tr>';
  const recs=S.records;if(!sel&&recs.length)sel=recs[0].output.token_address+'|'+recs[0].meta.stage;
@@ -185,7 +191,7 @@ async function tick(){
  detail(cur());
  const mx=Math.max(1,...S.ruleHits.map(h=>h.n));
  $('hits').innerHTML=S.ruleHits.length?S.ruleHits.map(h=>`<div class="cat" style="grid-template-columns:44px 1fr 40px"><span class="rid s-HIGH" style="text-align:center">${esc(h.id)}</span><div><div class="sm">${esc(h.title)}</div><div class="track" style="margin-top:3px"><div style="width:${h.n/mx*100}%;background:var(--rej)"></div></div></div><span class="sc sm">${h.n}</span></div>`).join(''):'<span class="mut">Nothing yet.</span>';
- $('tr').innerHTML=S.closed.length?S.closed.map(t=>`<tr><td>${esc(String(t.closedAt).slice(11,19))}</td><td><a href="https://www.clanker.world/clanker/${esc(t.mint)}" target="_blank">$${esc(t.symbol)}</a></td><td>${f4(t.cost)}</td><td>${f4(t.proceeds)}</td><td class="${t.pnl>=0?'g':'r'}">${sgn(t.pnl)}</td><td>${f4(t.hwm)}</td><td class="sm" style="white-space:normal">${esc(t.reason)}</td></tr>`).join(''):'<tr><td colspan="7" class="mut">No closed trades yet.</td></tr>';
+ $('tr').innerHTML=S.closed.length?S.closed.map(t=>`<tr><td>${esc(String(t.closedAt).slice(11,19))}</td><td><a href="${coinUrl('',t.mint)}" target="_blank">$${esc(t.symbol)}</a></td><td>${f4(t.cost)}</td><td>${f4(t.proceeds)}</td><td class="${t.pnl>=0?'g':'r'}">${sgn(t.pnl)}</td><td>${f4(t.hwm)}</td><td class="sm" style="white-space:normal">${esc(t.reason)}</td></tr>`).join(''):'<tr><td colspan="7" class="mut">No closed trades yet.</td></tr>';
  $('flags').innerHTML=S.flags.recent.length?S.flags.recent.map(f=>`<tr><td><a href="https://basescan.org/address/${esc(f.wallet)}" target="_blank" class="mono">${sh(f.wallet)}</a></td><td>${f.flag}</td><td class="sm mut" style="white-space:normal">${esc(f.evidence.reason||('funded rugger '+String(f.evidence.rugger||'').slice(0,6)+'…'))}</td></tr>`).join(''):'<tr><td class="mut">None yet — learned while the bot runs.</td></tr>';
  $('health').innerHTML=S.health.map(h=>`<tr><td>${esc(h.provider)}</td><td class="${h.status==='OK'?'g':'y'}">${esc(h.status)}</td><td>${h.last_success_at?esc(String(h.last_success_at).slice(11,19)):'—'}</td><td>${h.last_slot??'—'}</td><td>${h.consecutive_failures}</td></tr>`).join('');
  $('set').innerHTML=Object.entries(S.settings).map(([k,v])=>`<span class="mut">${esc(k)}</span> <b>${esc(v)}</b>`).join(' &nbsp;·&nbsp; ');

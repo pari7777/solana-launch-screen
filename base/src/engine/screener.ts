@@ -1,20 +1,20 @@
 /**
- * One Clanker launch from birth to final decision.
- *   0 s           TokenCreated seen → read the token, recover the pool key, trace the creator (in parallel)
+ * One launch (Clanker, Zora, Flaunch or Doppler) from birth to final decision.
+ *   0 s           launch seen → read the token, build the ETH route, trace the creator (in parallel)
  *   0–3 s         Transfer + Swap logs give holders, buys and sells; up to TRACE_BUYERS early buyers are traced
  *   ≤ 6 s         stage 1: all rules → decision (anything unfinished counts as missing evidence)
- *   20…150 s      WAIT / MONITOR re-checked (Clanker's sniper fee decays over the first minutes); last re-check resolves to REJECT
+ *   20…150 s      WAIT / MONITOR re-checked (launch fees decay over the first minutes); last re-check resolves to REJECT
  * Learns ruggers: a creator that sells ≥ DEV_DUMP_PCT % of what it held is flagged, and so is its funder.
  */
 import { formatUnits, type PublicClient } from "viem";
 import { ERC20_ABI } from "../chain/abi";
 import { timed } from "../chain/client";
-import { PoolQuoter, recoverPoolKey } from "../chain/pool";
+import { PoolQuoter, type Route } from "../chain/pool";
 import type { WalletTracer } from "../chain/wallets";
-import { ADDR, config, lc } from "../config";
+import { config, DEFAULT_SUPPLY, lc, PLATFORM_ADDR, PLATFORM_LABEL, ZERO } from "../config";
 import type { Store } from "../data/store";
 import { TokenState } from "../graph/token-state";
-import { buildFundingGraph, computeRisk, TOTAL_SUPPLY } from "../graph/risk";
+import { buildFundingGraph, computeRisk } from "../graph/risk";
 import { evaluateAll, loadRules, type Evidence } from "../rules/registry";
 import type { Decision, Hex, LaunchEvent, PoolKey, PoolSwap, Quote, TokenTransfer, WalletTrace } from "../types";
 import { decide, type DecisionResult } from "./decision";
@@ -31,6 +31,7 @@ const withTimeout = <T>(p: Promise<T>, ms: number) => Promise.race([p, new Promi
 
 interface Watch {
   launch: LaunchEvent; state: TokenState; key: PoolKey | null;
+  route: Tracked<Route> | null;
   onchain: Tracked<{ totalSupply: number | null; decimals: number | null; isContract: boolean }>;
   creator: Tracked<WalletTrace>;
   buyers: Map<string, Tracked<WalletTrace>>;
@@ -46,7 +47,7 @@ export interface Record_ {
 
 export interface ScreenerHooks {
   canAutoBuy: () => string | null;
-  onSelected: (s: { launch: LaunchEvent; key: PoolKey; result: DecisionResult; quote: Quote | null }) => Promise<string>;
+  onSelected: (s: { launch: LaunchEvent; route: Route; result: DecisionResult; quote: Quote | null }) => Promise<string>;
   onRecord: (r: Record_) => void;
   watch: (token: string, poolId: string) => void;
   unwatch: (token: string, poolId: string) => void;
@@ -59,7 +60,7 @@ export class Screener {
   watch = new Map<string, Watch>();                 // by token (lowercase)
   private byPool = new Map<string, string>();       // poolId → token
   private creators = new Map<string, { token: string; until: number }>();
-  stats = { scanned: 0, stage1: {} as Record<string, number>, final: {} as Record<string, number>, ruleHits: {} as Record<string, number> };
+  stats = { scanned: 0, overflow: 0, byPlatform: {} as Record<string, number>, stage1: {} as Record<string, number>, final: {} as Record<string, number>, ruleHits: {} as Record<string, number> };
   decisionMs: number[] = [];
   records: Record_[] = [];
   finalStage = config.recheckAt.length + 1;
@@ -69,7 +70,7 @@ export class Screener {
     this.quoter = new PoolQuoter(client);
   }
 
-  async loadStats() { this.stats = await this.store.get("screener_stats", this.stats); }
+  async loadStats() { this.stats = { ...this.stats, ...(await this.store.get("screener_stats", this.stats)) }; }
   saveStats() { return this.store.put("screener_stats", this.stats); }
 
   /** Launches from the backfill only feed creator history; they are not screened. */
@@ -78,18 +79,25 @@ export class Screener {
   onLaunch(l: LaunchEvent) {
     const token = lc(l.token);
     if (this.watch.has(token)) return;
-    this.stats.scanned++;
-    const key = recoverPoolKey(l.token, l.pairedToken, l.hook, l.poolId);
+    if (this.watch.size >= config.maxInReview) {                // keep the free RPC healthy: count it, keep it for creator history
+      this.stats.overflow++; if (lc(l.creator) !== ZERO) this.store.insertLaunch(l).catch(() => {}); return;
+    }
+    this.stats.scanned++; this.bump(this.stats.byPlatform, l.platform);
+    const key = l.poolKey;
     const tokenIs0 = key ? lc(key.currency0) === token : BigInt(l.token) < BigInt(l.pairedToken);
+    const routers = [key?.hooks ?? l.hook, ...(l.platform === "flaunch" ? PLATFORM_ADDR.flaunchInfra : [])].filter((x) => x && lc(x) !== ZERO);
+    const state = new TokenState(token, tokenIs0, new Set(), routers);
+    const route = key ? track(this.quoter.route(l.token, key).then(async (r) => {
+      state.setEthRate(await this.quoter.pairedEthRate(r).catch(() => 1)); return r; })) : null;
     const w: Watch = {
-      launch: l, key, state: new TokenState(token, tokenIs0, new Set()),
+      launch: l, key, route, state,
       onchain: track(this.readToken(l.token)), creator: track(this.tracer.trace(l.creator)),
       buyers: new Map(), prior: [], copycat: false, creatorPeak: 0,
     };
     this.watch.set(token, w);
     this.byPool.set(lc(l.poolId), token);
     this.hooks.watch(token, l.poolId);                      // synchronous: the same scan pulls its first trades
-    this.creators.set(lc(l.creator), { token, until: Date.now() + config.trackCreatorsMinutes * 60e3 });
+    if (lc(l.creator) !== ZERO) this.creators.set(lc(l.creator), { token, until: Date.now() + config.trackCreatorsMinutes * 60e3 });
     const start = Math.max(l.receivedAt, Date.now());
     setTimeout(() => this.evaluate(token, 1).catch((e) => console.error("evaluate", e)), Math.max(0, start + config.observeSeconds * 1000 - Date.now()));
     void (async () => {
@@ -143,6 +151,8 @@ export class Screener {
   }
 
   private async flagRugger(creator: string, token: string, pct: number) {
+    const t = await this.tracer.trace(creator as Hex).catch(() => null);
+    if (!t || t.txCount >= config.serviceNonce) return;          // never flag a platform deployer (Bankr, Zora, …)
     await this.store.flagWallet(creator, "RUGGER", { mint: token, reason: `dumped ${pct.toFixed(0)}% of own coin` });
     const f = await this.store.funderOf(creator);
     if (f && !f.service) await this.store.flagWallet(f.funder, "RUG_FUNDER", { rugger: creator, mint: token });
@@ -153,7 +163,7 @@ export class Screener {
     const w = this.watch.get(token); if (!w) return;
     const l = w.launch;
     const deadline = stage === 1 ? Math.max(l.receivedAt, Date.now() - config.observeSeconds * 1000) + config.decisionSeconds * 1000 - 1500 : Date.now() + 4000;
-    const pending = [w.onchain, w.creator, ...w.buyers.values()].filter((x) => !x.s.done).map((x) => x.p.catch(() => {}));
+    const pending = [w.onchain, w.creator, ...(w.route ? [w.route] : []), ...w.buyers.values()].filter((x) => !x.s.done).map((x) => x.p.catch(() => {}));
     const left = deadline - Date.now();
     if (pending.length && left > 0) await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, left))]);
 
@@ -169,7 +179,7 @@ export class Screener {
     if (res.decision === "SELECT_FOR_REVIEW" && w.key) {
       action = !config.autoBuy ? "selected — AUTO_BUY off" : block ? `not bought: ${block}` : "buying";
       this.finish(token, res.decision, action === "buying");
-      if (action === "buying") action = await this.hooks.onSelected({ launch: l, key: w.key, result: res, quote: ev.quote });
+      if (action === "buying") action = ev.route ? await this.hooks.onSelected({ launch: l, route: ev.route, result: res, quote: ev.quote }) : "not bought: no route";
     } else if ((res.decision === "WAIT" || res.decision === "MONITOR") && stage < this.finalStage) {
       const at = config.recheckAt[stage - 1];
       action = `re-check at ${at}s`;
@@ -177,7 +187,7 @@ export class Screener {
     } else { action = "skipped"; this.finish(token, res.decision, false); }
 
     await this.store.recordDecision(l, res.output, res.results).catch((e) => console.error("recordDecision", e.message));
-    const rec: Record_ = { output: res.output, meta: { symbol: l.symbol, name: l.name, platform: "Clanker", stage, elapsed_ms: elapsed, factors: res.factors,
+    const rec: Record_ = { output: res.output, meta: { symbol: l.symbol, name: l.name, platform: PLATFORM_LABEL[l.platform], stage, elapsed_ms: elapsed, factors: res.factors,
       score: res.score, gated: res.gated, action, time: new Date().toISOString().slice(11, 19), deployer: l.creator } };
     this.records.unshift(rec); if (this.records.length > 80) this.records.pop();
     this.hooks.onRecord(rec);
@@ -203,17 +213,19 @@ export class Screener {
       return f.has("RUGGER") ? "is a known rugger" : f.has("RUG_FUNDER") ? "funded a known rugger" : null;
     };
     const graph = buildFundingGraph(creator, creatorTrace, traces, isFlagged);
-    const extTokens = Number(formatUnits(l.extensionsSupply ?? 0n, 18));
-    const risk = computeRisk(creator, l.slot, w.state, graph, traces, extTokens, { dustEth: 0.002 });
+    const extTokens = l.platform === "clanker" ? Number(formatUnits(l.extensionsSupply ?? 0n, 18)) : 0;
+    const onchainSupply = w.onchain.s.value?.totalSupply ?? null;
+    const risk = computeRisk(creator, l.slot, w.state, graph, traces, extTokens, { dustEth: 0.002, supply: onchainSupply ?? DEFAULT_SUPPLY[l.platform] });
+    const route = w.route?.s.value ?? null;
+    const routeError = !w.key ? "pool key not found" : w.route?.s.error ?? (w.route?.s.done ? null : "pending");
     let quote: Quote | null = null, quoteError: string | null = null, sellReverted = false;
-    if (!w.key) quoteError = "pool key not recovered";
-    else if (lc(l.pairedToken) !== lc(ADDR.weth)) quoteError = "pair is not WETH";
+    if (!route) quoteError = routeError ?? "no route";
     else {
-      try { quote = await withTimeout(this.quoter.analyse(w.key, config.buyEth, risk.topHolderTokens, risk.clusterTokens), 3500); }
+      try { quote = await withTimeout(this.quoter.analyse(route, config.buyEth, risk.topHolderTokens, risk.clusterTokens), 3500 + 1500 * (route.hops.length - 1)); }
       catch (e: any) {
         quoteError = String(e?.shortMessage ?? e?.message ?? e).slice(0, 120);
         if (/revert/i.test(quoteError)) {
-          try { await withTimeout(this.quoter.buy(w.key, 10n ** 14n), 2000); sellReverted = true; } catch { /* buys fail too: trading not open */ }
+          try { await withTimeout(this.quoter.buy(route, 10n ** 14n), 2500); sellReverted = true; } catch { /* buys fail too: trading not open */ }
         }
       }
     }
@@ -223,11 +235,12 @@ export class Screener {
     const poolEth = Math.max(0, w.state.trades.reduce((a, t) => a + (t.side === "buy" ? t.eth : -t.eth), 0));
     const onchain = w.onchain.s.value ?? null;
     return {
-      venue: "clanker_v4", stage, final: stage >= this.finalStage, now: Date.now(), ageSec: Math.round((Date.now() - (l.blockTime ? l.blockTime * 1000 : l.receivedAt)) / 1000),
-      launch: l, poolKey: w.key, onchain, onchainError: w.onchain.s.error ?? (w.onchain.s.done ? null : "pending"),
+      venue: "launch_v4", stage, final: stage >= this.finalStage, now: Date.now(), ageSec: Math.round((Date.now() - (l.blockTime ? l.blockTime * 1000 : l.receivedAt)) / 1000),
+      launch: l, platform: l.platform, poolKey: w.key, route, routeError, onchain, onchainError: w.onchain.s.error ?? (w.onchain.s.done ? null : "pending"),
       quote, quoteError, sellReverted, risk, graph,
       creatorTrace, creatorTraceError: w.creator.s.error ?? (w.creator.s.done ? null : "pending"),
       senderIsPlatform: lc(l.sender) !== creator,
+      creatorIsPlatform: creator === ZERO || (!!creatorTrace && creatorTrace.txCount >= config.serviceNonce),
       buyerTracesNeeded: Math.min(config.traceBuyers, eligible.size), buyerTracesDone: [...traces.keys()].filter((k) => eligible.has(k)).length,
       history: { rugger: rug ? String(rug.reason ?? "dumped an earlier coin") : null, prior: w.prior, copycat: w.copycat,
                  funderFlag: isFlagged(graph.creatorFunder), funderLaunches },
@@ -238,5 +251,3 @@ export class Screener {
 
   housekeeping() { const now = Date.now(); for (const [c, v] of this.creators) if (v.until < now) this.creators.delete(c); }
 }
-
-export { TOTAL_SUPPLY };

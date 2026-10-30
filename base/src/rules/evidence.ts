@@ -1,10 +1,13 @@
 import type { FundingGraph, Risk } from "../graph/risk";
-import type { LaunchEvent, PoolKey, Quote, RuleOutcome, Venue, WalletTrace } from "../types";
+import type { Route } from "../chain/pool";
+import type { LaunchEvent, Platform, PoolKey, Quote, RuleOutcome, Venue, WalletTrace } from "../types";
 
 export interface Evidence {
   venue: Venue; stage: number; final: boolean; now: number; ageSec: number;
   launch: LaunchEvent;
+  platform: Platform;
   poolKey: PoolKey | null;
+  route: Route | null; routeError: string | null;     // launch pool → backing pools → ETH
   onchain: { totalSupply: number | null; decimals: number | null; isContract: boolean } | null;
   onchainError: string | null;
   quote: Quote | null; quoteError: string | null;
@@ -12,6 +15,7 @@ export interface Evidence {
   risk: Risk; graph: FundingGraph;
   creatorTrace: WalletTrace | null; creatorTraceError: string | null;
   senderIsPlatform: boolean;            // msgSender is a busy service (Clanker bot / frontend), not the creator
+  creatorIsPlatform: boolean;           // the only known "creator" is a platform deployer (e.g. Bankr via Doppler): real creator not on-chain
   buyerTracesNeeded: number; buyerTracesDone: number;
   history: { rugger: string | null; prior: { mint: string; decision: string }[]; copycat: boolean; funderFlag: string | null; funderLaunches: number };
   poolEth: number;                      // ETH that traders put into the pool (net buys − sells)

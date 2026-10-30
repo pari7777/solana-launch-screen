@@ -1,8 +1,8 @@
-/** Wallet graph and concentration metrics for one Clanker launch (same ideas as the Solana bot). */
+/** Wallet graph and concentration metrics for one launch (same ideas as the Solana bot). */
 import type { Trade, WalletTrace } from "../types";
 import type { TokenState } from "./token-state";
 
-export const TOTAL_SUPPLY = 100_000_000_000;            // every Clanker v4 token: 100 billion, 18 decimals
+export const TOTAL_SUPPLY = 100_000_000_000;            // Clanker v4 default; each launch passes its real supply
 
 export interface FundingGraph {
   creatorFunder: string | null; linked: string[]; sharedFunderGroups: Record<string, string[]>; clustered: string[];
@@ -30,13 +30,13 @@ export interface Risk {
   firstBlockWallets: string[]; firstBlockPct: number;
   independentBuyers: string[]; dustFrac: number; freshFrac: number; tracedBuyers: number;
   washWallets: string[]; washShare: number; swingPct: number | null; dropFromFirstPct: number | null;
-  linkedSelling: string[]; firstBlockSelling: string[]; extensionsPct: number;
+  linkedSelling: string[]; firstBlockSelling: string[]; extensionsPct: number; supply: number;
 }
 
-const pct = (t: number) => Math.round((t / TOTAL_SUPPLY) * 10000) / 100;
-
 export function computeRisk(creator: string, launchBlock: number, st: TokenState, graph: FundingGraph,
-                            traces: Map<string, WalletTrace>, extensionsSupplyTokens: number, opts: { dustEth: number }): Risk {
+                            traces: Map<string, WalletTrace>, extensionsSupplyTokens: number, opts: { dustEth: number; supply?: number }): Risk {
+  const supply = opts.supply && opts.supply > 0 ? opts.supply : TOTAL_SUPPLY;
+  const pct = (t: number) => Math.round((t / supply) * 10000) / 100;
   const trades: Trade[] = st.trades;
   const holders = new Map(st.holders());
   const firstBuyBlock = new Map<string, number>(), ethIn = new Map<string, number>(), sellers = new Set<string>();
@@ -78,6 +78,6 @@ export function computeRisk(creator: string, launchBlock: number, st: TokenState
     dropFromFirstPct: prices.length >= 2 ? Math.round((1 - prices[prices.length - 1] / prices[0]) * 1000) / 10 : null,
     linkedSelling: [...sellers].filter((w) => linked.has(w) || clustered.has(w)),
     firstBlockSelling: [...sellers].filter((w) => firstBlock.includes(w)),
-    extensionsPct: pct(extensionsSupplyTokens),
+    extensionsPct: pct(extensionsSupplyTokens), supply,
   };
 }

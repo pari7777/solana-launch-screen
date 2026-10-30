@@ -1,15 +1,18 @@
 /**
  * Polls Base for new blocks and pulls, per block range:
- *   1. Clanker TokenCreated events (new launches)
- *   2. ERC-20 Transfer events of every watched token (holders, buys, sells, creator dumps)
- *   3. Uniswap v4 Swap events of every watched pool (price and ETH amounts)
- * Launches found in a range are watched within the same pass, so their first trades are never missed.
+ *   1. launch events from every enabled platform (Clanker, Zora, Flaunch, Doppler)
+ *   2. PoolManager.Initialize for launches whose pool key is not in their event (Flaunch, Doppler)
+ *   3. ERC-20 Transfer events of every watched token (holders, buys, sells, creator dumps)
+ *   4. Uniswap v4 Swap events of every watched pool (price and amounts)
+ * Launches found in a range are handed over before step 3, so their first trades are never missed.
  */
 import type { PublicClient } from "viem";
-import { ADDR, config } from "../config";
+import { ADDR, config, lc, ZERO } from "../config";
 import type { Hex, LaunchEvent, PoolSwap, TokenTransfer } from "../types";
-import { SWAP, TOKEN_CREATED, TRANSFER } from "./abi";
+import { ERC20_META, INITIALIZE, SWAP, TRANSFER } from "./abi";
 import { timed } from "./client";
+import { SOURCES } from "./platforms";
+import { poolId } from "./pool";
 
 export interface WatcherHandlers {
   onLaunch: (l: LaunchEvent) => void;
@@ -28,6 +31,9 @@ export class ChainWatcher {
   tokens = new Set<string>();
   pools = new Set<string>();
   private blockTimes = new Map<bigint, number>();
+  /** Launches still waiting for their pool to be initialized (≤ 10 blocks). */
+  private pendingKey: { l: LaunchEvent; until: number }[] = [];
+  counts = { unsupported: 0 };
   private stopped = false;
   constructor(private client: PublicClient, private h: WatcherHandlers) {}
 
@@ -41,7 +47,7 @@ export class ChainWatcher {
   }
   stop() { this.stopped = true; }
 
-  /** Load the last N hours of Clanker launches so creator history works from the first minute. */
+  /** Load the last N hours of launches so creator history works from the first minute. */
   async backfill(hours = config.backfillHours) {
     if (!this.h.onBackfill || hours <= 0) return 0;
     const head = this.head || (await this.client.getBlockNumber());
@@ -49,10 +55,12 @@ export class ChainWatcher {
     let n = 0;
     for (let a = from; a < head; a += BigInt(config.maxBlockRange)) {
       const b = a + BigInt(config.maxBlockRange) - 1n < head ? a + BigInt(config.maxBlockRange) - 1n : head;
-      try {
-        const logs = await timed(() => this.client.getLogs({ address: ADDR.clankerFactory as Hex, event: TOKEN_CREATED, fromBlock: a, toBlock: b }));
-        for (const log of logs) { const l = this.toLaunch(log, Date.now() - Number(head - log.blockNumber) * 2000); if (l) { await this.h.onBackfill(l); n++; } }
-      } catch { /* skip a failed chunk */ }
+      for (const src of SOURCES.filter((x) => x.platform !== "doppler")) {     // Doppler's creator needs one tx lookup per launch
+        try {
+          const logs = await timed(() => this.client.getLogs({ address: src.address, event: src.event, fromBlock: a, toBlock: b }));
+          for (const log of logs) { const l = src.decode(log, Date.now() - Number(head - log.blockNumber) * 2000); if (l && lc(l.creator) !== ZERO) { await this.h.onBackfill(l); n++; } }
+        } catch { /* skip a failed chunk */ }
+      }
     }
     return n;
   }
@@ -85,23 +93,47 @@ export class ChainWatcher {
     return ms;
   }
 
-  private toLaunch(log: any, at: number): LaunchEvent | null {
-    const a = log.args; if (!a?.tokenAddress) return null;
-    return {
-      signature: log.transactionHash, instructionIndex: Number(log.logIndex), slot: Number(log.blockNumber),
-      token: a.tokenAddress, creator: a.tokenAdmin, sender: a.msgSender, name: a.tokenName ?? "", symbol: a.tokenSymbol ?? "",
-      image: a.tokenImage ?? "", metadata: a.tokenMetadata ?? "", context: a.tokenContext ?? "", startingTick: Number(a.startingTick),
-      hook: a.poolHook, poolId: a.poolId, pairedToken: a.pairedToken, locker: a.locker, mevModule: a.mevModule,
-      extensionsSupply: a.extensionsSupply ?? 0n, extensions: a.extensions ?? [], receivedAt: Date.now(), blockTime: Math.floor(at / 1000),
-    };
+  /** Doppler's Create event has no creator or name: take the transaction sender and read the token. */
+  private async enrichDoppler(l: LaunchEvent) {
+    const [tx, meta] = await Promise.all([
+      timed(() => this.client.getTransaction({ hash: l.signature as Hex })).catch(() => null),
+      timed(() => this.client.multicall({ allowFailure: true, contracts: [
+        { address: l.token, abi: ERC20_META, functionName: "name" }, { address: l.token, abi: ERC20_META, functionName: "symbol" }] })).catch(() => null),
+    ]);
+    if (tx) { l.creator = tx.from; l.sender = tx.from; }
+    if (meta) { l.name = String(meta[0].result ?? ""); l.symbol = String(meta[1].result ?? ""); }
+  }
+
+  /** Match waiting launches to PoolManager.Initialize: Flaunch by pool id, Doppler by token. */
+  private async resolveKeys(from: bigint, to: bigint): Promise<LaunchEvent[]> {
+    const logs = await timed(() => this.client.getLogs({ address: ADDR.poolManager as Hex, event: INITIALIZE, fromBlock: from, toBlock: to })).catch(() => [] as any[]);
+    const done: LaunchEvent[] = [];
+    this.pendingKey = this.pendingKey.filter(({ l, until }) => {
+      const hit = (logs as any[]).find((g) => l.platform === "flaunch" ? lc(g.args.id) === lc(l.poolId)
+        : lc(g.args.currency0) === lc(l.token) || lc(g.args.currency1) === lc(l.token));
+      if (hit) {
+        const a = hit.args;
+        l.poolKey = { currency0: a.currency0, currency1: a.currency1, fee: Number(a.fee), tickSpacing: Number(a.tickSpacing), hooks: a.hooks };
+        l.poolId = poolId(l.poolKey); l.hook = a.hooks;
+        l.pairedToken = lc(a.currency0) === lc(l.token) ? a.currency1 : a.currency0;
+        done.push(l); return false;
+      }
+      if (Number(to) > until) { this.counts.unsupported++; return false; }   // e.g. Doppler launches on Uniswap v3
+      return true;
+    });
+    return done;
   }
 
   private async scan(from: bigint, to: bigint) {
-    const launches = await timed(() => this.client.getLogs({ address: ADDR.clankerFactory as Hex, event: TOKEN_CREATED, fromBlock: from, toBlock: to }));
-    for (const log of launches) {
-      const l = this.toLaunch(log, await this.blockTime(log.blockNumber).catch(() => Date.now()));
-      if (l) this.h.onLaunch(l);                             // onLaunch calls watchToken synchronously
-    }
+    const found = (await Promise.all(SOURCES.map(async (src) => {
+      const logs = await timed(() => this.client.getLogs({ address: src.address, event: src.event, fromBlock: from, toBlock: to }));
+      return Promise.all(logs.map(async (log: any) => src.decode(log, await this.blockTime(log.blockNumber).catch(() => Date.now()))));
+    }))).flat().filter((l): l is LaunchEvent => !!l);
+    await Promise.all(found.filter((l) => l.platform === "doppler").map((l) => this.enrichDoppler(l)));
+    const ready = found.filter((l) => l.poolKey);
+    for (const l of found) if (!l.poolKey) this.pendingKey.push({ l, until: Number(to) + 10 });
+    if (this.pendingKey.length) ready.push(...await this.resolveKeys(from, to));
+    for (const l of ready) this.h.onLaunch(l);               // onLaunch calls watchToken synchronously
     const tokens = [...this.tokens], pools = [...this.pools];
     const [transferLogs, swapLogs] = await Promise.all([
       Promise.all(chunk(tokens, 40).map((ts) => timed(() => this.client.getLogs({ address: ts as Hex[], event: TRANSFER, fromBlock: from, toBlock: to })))),

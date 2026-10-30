@@ -19,11 +19,13 @@ export function printDecision(r: Record_) {
 
 export const printEvent = (msg: string) => console.log(`${C.c}${new Date().toISOString().slice(11, 19)}${C.x} ${C.B}${msg}${C.x}`);
 
-export function printStatus(s: { scanned: number; final: Record<string, number>; stream: string; rpc: any; open: number; pnl: number; mode: string; url: string }) {
+export function printStatus(s: { scanned: number; byPlatform?: Record<string, number>; overflow?: number; final: Record<string, number>; stream: string; rpc: any; open: number; pnl: number; mode: string; url: string }) {
   const f = s.final;
   console.log(`${C.m}── ${s.mode.toUpperCase()} · stream ${s.stream} · scanned ${s.scanned} · ` +
     `select ${f.SELECT_FOR_REVIEW ?? 0} / reject ${f.REJECT ?? 0} · open ${s.open} · P&L ${s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(5)} ETH · ` +
     `RPC p50 ${s.rpc.p50_ms ?? "—"}ms, ${s.rpc.errors} errors · ${s.url} ──${C.x}`);
+  const bp = Object.entries(s.byPlatform ?? {}).map(([k, v]) => `${k} ${v}`).join(", ");
+  console.log(`${C.d}   by platform: ${bp || "—"}${s.overflow ? ` · ${s.overflow} not screened (busy)` : ""}${s.rpc.last_error ? ` · last rpc error: ${s.rpc.last_error}` : ""}${C.x}`);
   const eps = s.rpc.endpoints ?? [];
   if (eps.length > 1) void 0; if (false) console.log(`${C.d}   rpc endpoints: ${eps.map((e: any) => `${new URL(e.url).host} ok ${e.ok} / fail ${e.fail}${e.restingFor ? ` (resting ${e.restingFor}s)` : ""}`).join(" · ")}${C.x}`);
 }

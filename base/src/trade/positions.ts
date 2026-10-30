@@ -6,18 +6,18 @@
  * The creator selling, a linked wallet selling or the largest holder dumping also trigger a full exit.
  */
 import { formatEther, parseEther } from "viem";
-import type { PoolQuoter } from "../chain/pool";
-import { config, lc } from "../config";
+import type { PoolQuoter, Route } from "../chain/pool";
+import { config, lc, PLATFORM_LABEL } from "../config";
 import type { Store } from "../data/store";
 import type { DecisionResult } from "../engine/decision";
-import type { LaunchEvent, PoolKey, Quote, TokenTransfer } from "../types";
+import type { LaunchEvent, Quote, TokenTransfer } from "../types";
 
 export type Status = "OPEN" | "EXIT_PENDING" | "CLOSED";
 export interface Position {
   token: string; symbol: string; platform: string; mode: "paper"; wallet: null; status: Status; venue: string;
   tokens: number; costEth: number; netLiquidationValue: number; highWaterValue: number; openedAt: number; score: number;
   exitReason?: string; proceedsEth?: number; pnlEth?: number; closedAt?: number;
-  meta: { key: PoolKey; poolId: string; creator: string; linked: string[]; whale: string | null; whaleBag: number; whaleSold: number };
+  meta: { route: Route; poolId: string; creator: string; linked: string[]; whale: string | null; whaleBag: number; whaleSold: number };
 }
 
 export class PositionManager {
@@ -39,7 +39,7 @@ export class PositionManager {
     } else this.paperEth = await this.store.get("paper_eth", config.paperStartEth);
     this.todayPnl = (await this.store.pnlSummary()).today;
     for (const r of await this.store.openPositions()) {
-      if (!r.meta?.key) continue;
+      if (!r.meta?.route) continue;
       this.positions.set(r.mint, { token: r.mint, symbol: r.symbol, platform: r.meta.platform ?? "Clanker", mode: "paper", wallet: null, status: r.status, venue: r.venue,
         tokens: Number(r.tokens), costEth: Number(r.cost_sol), netLiquidationValue: Number(r.net_liquidation_value ?? 0),
         highWaterValue: Number(r.high_water_value ?? 0), openedAt: new Date(r.opened_at).getTime(), score: Number(r.score ?? 0),
@@ -59,19 +59,20 @@ export class PositionManager {
     return null;
   }
 
-  async onSelected(s: { launch: LaunchEvent; key: PoolKey; result: DecisionResult; quote: Quote | null }, platform = "Clanker"): Promise<string> {
-    const { launch, key, result } = s;
+  async onSelected(s: { launch: LaunchEvent; route: Route; result: DecisionResult; quote: Quote | null }): Promise<string> {
+    const { launch, route, result } = s;
+    const platform = PLATFORM_LABEL[launch.platform];
     try {
-      const out = await this.quoter.buy(key, parseEther(String(config.buyEth)));
+      const out = await this.quoter.buy(route, parseEther(String(config.buyEth)));
       const tokens = Number(formatEther(out)) * (1 - config.paperSlippagePct / 100);
       const cost = config.buyEth + config.gasEth;
       this.paperEth -= cost; await this.store.put("paper_eth", this.paperEth);
       this.buyTimes.push(Date.now());
       const r = result.output;
       const p: Position = {
-        token: lc(launch.token), symbol: launch.symbol, platform, mode: "paper", wallet: null, status: "OPEN", venue: "clanker_v4",
+        token: lc(launch.token), symbol: launch.symbol, platform, mode: "paper", wallet: null, status: "OPEN", venue: "launch_v4",
         tokens, costEth: cost, netLiquidationValue: 0, highWaterValue: 0, openedAt: Date.now(), score: result.score,
-        meta: { key, poolId: lc(launch.poolId), creator: lc(launch.creator), linked: r.launch_wallet.linked_wallet_clusters.flatMap((c) => c.wallets),
+        meta: { route, poolId: lc(launch.poolId), creator: lc(launch.creator), linked: r.launch_wallet.linked_wallet_clusters.flatMap((c) => c.wallets),
                 whale: result.topHolder, whaleBag: result.topHolderTokens, whaleSold: 0 },
       };
       this.positions.set(p.token, p);
@@ -121,11 +122,11 @@ export class PositionManager {
   }
 
   async nlv(p: Position) {
-    const v = await this.quoter.liquidationValue(p.meta.key, p.tokens);
+    const v = await this.quoter.liquidationValue(p.meta.route, p.tokens);
     return Math.max(0, v * (1 - config.paperSlippagePct / 100) - config.gasEth);
   }
 
-  /** Insider exits from the token's Transfer logs (sells go to the PoolManager / router). */
+  /** Insider exits from the token's Transfer logs (sells go to the PoolManager / router / platform hook). */
   onTransfers(token: string, ts: TokenTransfer[], isSell: (t: TokenTransfer) => boolean) {
     const p = this.positions.get(token); if (!p || p.status !== "OPEN") return;
     for (const t of ts) {

@@ -1,4 +1,5 @@
-export type Venue = "clanker_v4" | "generic_amm" | "signing";
+export type Venue = "launch_v4" | "generic_amm" | "signing";
+export type Platform = "clanker" | "zora" | "flaunch" | "doppler";
 export type Decision = "REJECT" | "WAIT" | "MONITOR" | "SELECT_FOR_REVIEW";
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 export type RuleStatus = "TRIGGERED" | "PASS" | "MISSING" | "NOT_APPLICABLE";
@@ -8,15 +9,17 @@ export type Hex = `0x${string}`;
 export interface PoolKey { currency0: Hex; currency1: Hex; fee: number; tickSpacing: number; hooks: Hex }
 
 export interface LaunchEvent {
+  platform: Platform;
+  poolKey: PoolKey | null;    // known from the launch event (Zora) or rebuilt (Clanker); Flaunch/Doppler get it from PoolManager.Initialize
   signature: string;          // transaction hash
   instructionIndex: number;   // log index
   slot: number;               // block number
   token: Hex;
   creator: Hex;               // tokenAdmin — the person behind the coin
-  sender: Hex;                // msgSender — often a platform deployer (Clanker bot, frontends)
+  sender: Hex;                // msgSender / tx sender — often a platform deployer (Clanker bot, Zora, Bankr, frontends)
   name: string; symbol: string; image: string; metadata: string; context: string;
   startingTick: number;
-  hook: Hex; poolId: Hex; pairedToken: Hex; locker: Hex; mevModule: Hex;
+  hook: Hex; poolId: Hex; pairedToken: Hex; locker: Hex; mevModule: Hex;   // zero address when the platform has none / not yet known
   extensionsSupply: bigint; extensions: Hex[];
   receivedAt: number;
   blockTime: number;          // seconds

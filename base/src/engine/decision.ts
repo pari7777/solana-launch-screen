@@ -1,6 +1,6 @@
 /** Decision (REJECT / WAIT / MONITOR / SELECT_FOR_REVIEW) and the output JSON, Base edition. */
 import { config } from "../config";
-import { TOTAL_SUPPLY } from "../graph/risk";
+import { PLATFORM_LABEL } from "../config";
 import { MISSING_LABEL, type Evidence } from "../rules/registry";
 import type { Decision, DecisionOutput, Factor, RuleResult } from "../types";
 import { applyGates, type Gates } from "./gates";
@@ -39,7 +39,7 @@ export function decide(ev: Evidence, results: RuleResult[], autoBuyAllowed: (d: 
   if (decision !== "REJECT") {
     const q = ev.quote, r = ev.risk, t = ev.creatorTrace;
     const text: Partial<Record<Factor, string | null>> = {
-      contract: ev.onchain ? "official Clanker v4 token · fixed 100B supply · no mint / tax / blacklist · LP locked in Clanker locker" : null,
+      contract: ev.onchain ? `official ${PLATFORM_LABEL[ev.platform]} launch · supply ${ev.risk.supply.toLocaleString()} · no tax / blacklist · liquidity held by the platform` : null,
       liquidity: q ? `${ev.poolEth.toFixed(3)} ETH traded into pool · buy impact ${q.buyImpactPct}% · round-trip ${q.roundTripPct}% · dump-stress ${q.dumpStressLossPct}%` : null,
       creator: t ? `creator ${t.txCount} txs${t.ageHours !== null ? `, ${Math.round(t.ageHours)}h old` : ""} · ${t.funderIsService ? "exchange-funded" : t.funder ? `funder ${short(t.funder)}` : "long history"} · no prior launches · holds ${r.creatorPct}%` : null,
       holders: `top-10 ${r.top10Pct}% · largest ${r.top1Pct}% · linked ${r.linkedPct}% · clustered ${r.clusterPct}% · launch-block ${r.firstBlockPct}% · extensions ${r.extensionsPct}%`,
@@ -50,13 +50,13 @@ export function decide(ev: Evidence, results: RuleResult[], autoBuyAllowed: (d: 
       if (factors[f] >= 80 && text[f] && !factorBlocked(f, results)) selection.push({ factor_id: FACTOR_LABEL[f][0], factor: FACTOR_LABEL[f][1], score: factors[f], evidence: text[f]! });
   }
 
-  const pct = (ws: string[]) => Math.round(ws.reduce((a, w) => a + (ev.risk.holders.get(w) ?? 0), 0) / TOTAL_SUPPLY * 10000) / 100;
+  const pct = (ws: string[]) => Math.round(ws.reduce((a, w) => a + (ev.risk.holders.get(w) ?? 0), 0) / ev.risk.supply * 10000) / 100;
   const clusters: DecisionOutput["launch_wallet"]["linked_wallet_clusters"] = [];
   if (ev.graph.linked.length) clusters.push({ type: "CREATOR_LINKED", funder: ev.graph.creatorFunder ?? ev.launch.creator, wallets: ev.graph.linked, share_pct: pct(ev.graph.linked) });
   for (const [f, ws] of Object.entries(ev.graph.sharedFunderGroups)) clusters.push({ type: "SHARED_FUNDER", funder: f, wallets: ws, share_pct: pct(ws) });
   if (ev.risk.firstBlockWallets.length) clusters.push({ type: "LAUNCH_BLOCK_SNIPERS", funder: "unknown", wallets: ev.risk.firstBlockWallets, share_pct: ev.risk.firstBlockPct });
 
-  const authorities = ["token_admin:metadata_only"];
+  const authorities = ev.platform === "clanker" ? ["token_admin:metadata_only"] : ev.platform === "doppler" ? ["owner:capped_inflation_mint"] : ["none"];
   if (ev.risk.extensionsPct > 0) authorities.push(`extensions:${ev.risk.extensionsPct}%_supply`);
   const t = ev.creatorTrace;
   const funding = t?.funder ? (t.funderIsService ? `${t.funder} (exchange/service)` : t.funder) : "unknown";

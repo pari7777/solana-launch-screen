@@ -1,6 +1,6 @@
 /**
  * base-launch-screen — entry point.  npm start
- * Base RPC polling (Clanker TokenCreated + Transfer + Uniswap v4 Swap logs) → screener (120 rules, staged re-checks)
+ * Base RPC polling (Clanker, Zora, Flaunch, Doppler launches + Transfer + Uniswap v4 Swap logs) → screener (120 rules, staged re-checks)
  * → paper positions (Quoter-valued, 35% trailing drawdown) → terminal, dashboard, Telegram, webhook.
  */
 import { banner, printDecision, printEvent, printStatus } from "./alerts/terminal";
@@ -9,14 +9,20 @@ import { telegram, webhook } from "./alerts/telegram";
 import { makeClient, rpcStats } from "./chain/client";
 import { WalletTracer } from "./chain/wallets";
 import { ChainWatcher } from "./chain/watcher";
-import { ADDR, config, lc } from "./config";
+import { config, INFRA, lc, PLATFORM_LABEL } from "./config";
+import { SOURCES } from "./chain/platforms";
+import type { Platform } from "./types";
 import { openDb } from "./data/db";
 import { Store } from "./data/store";
 import { Screener } from "./engine/screener";
 import { loadRules } from "./rules/registry";
 import { PositionManager } from "./trade/positions";
 
-const SELL_SINKS = new Set([ADDR.poolManager, ADDR.universalRouter].map(lc));
+const SELL_SINKS = new Set([...INFRA].filter((a) => !/^0x0{40}$|dead$/i.test(a)));   // pool manager, routers and platform hooks
+const LINK: Record<Platform, (t: string) => string> = {
+  clanker: (t) => `https://www.clanker.world/clanker/${t}`, zora: (t) => `https://zora.co/coin/base:${t}`,
+  flaunch: (t) => `https://flaunch.gg/base/coin/${t}`, doppler: (t) => `https://dexscreener.com/base/${t}`,
+};
 
 async function main() {
   const rules = loadRules();
@@ -45,7 +51,7 @@ async function main() {
       printDecision(r);
       const o = r.output;
       if (o.decision === "SELECT_FOR_REVIEW")
-        telegram(`🎯 BASE SELECT $${r.meta.symbol} · score ${o.risk_score} (${o.confidence}) · ${r.meta.action}\nhttps://www.clanker.world/clanker/${o.token_address}`);
+        telegram(`🎯 BASE SELECT $${r.meta.symbol} · score ${o.risk_score} (${o.confidence}) · ${r.meta.action}\n${LINK[(Object.keys(PLATFORM_LABEL) as Platform[]).find((k) => PLATFORM_LABEL[k] === r.meta.platform) ?? "doppler"](o.token_address)}`);
       if (config.webhookUrl && (config.webhookDecisions.includes("ALL") || config.webhookDecisions.includes(o.decision))) webhook(o);
     },
     watch: (t, id) => watcher.watchToken(t, id),
@@ -76,7 +82,7 @@ async function main() {
   for (const p of held) watcher.watchToken(p.token, p.meta.poolId);
   await watcher.start();
   setInterval(() => store.health("base_rpc", watcher.state === "connected", Number(watcher.head), watcher.state === "connected" ? "OK" : watcher.state.slice(0, 60)).catch(() => {}), 15_000);
-  void watcher.backfill().then((n) => printEvent(`creator history: loaded ${n} Clanker launches from the last ${config.backfillHours}h`)).catch(() => {});
+  void watcher.backfill().then((n) => printEvent(`creator history: loaded ${n} launches from the last ${config.backfillHours}h`)).catch(() => {});
 
   const url = `http://${config.host === "0.0.0.0" ? "localhost" : config.host}:${config.port}`;
   startDashboard({
@@ -89,7 +95,8 @@ async function main() {
         chain: "BASE", mode: "paper", live: false, paper: true, autoBuy: config.autoBuy, paused: config.paused, wallet: null,
         stream: { provider: "base rpc", state: watcher.state }, rpc: rpcStats(),
         market: { ethUsd, rpcLagSlots: watcher.head ? Number(watcher.head - watcher.cursor) : null },
-        scanned: screener.stats.scanned, stage1: screener.stats.stage1, final: screener.stats.final, inReview: screener.watch.size,
+        scanned: screener.stats.scanned, overflow: screener.stats.overflow, byPlatform: screener.stats.byPlatform,
+        platforms: [...new Set(SOURCES.map((x) => PLATFORM_LABEL[x.platform]))], unsupported: watcher.counts.unsupported, stage1: screener.stats.stage1, final: screener.stats.final, inReview: screener.watch.size,
         decisionMs: { p50: ms[Math.floor(ms.length / 2)] ?? null, p90: ms[Math.floor(ms.length * 0.9)] ?? null },
         ruleHits: hits, records: screener.records,
         positions: [...positions.positions.values()].map((p) => ({ mint: p.token, symbol: p.symbol, platform: p.platform, mode: p.mode, status: p.status, venue: p.venue,
@@ -116,7 +123,7 @@ async function main() {
 
   banner([
     `Mode        PAPER on Base (fake ETH, real launches) · balance ${positions.paperEth.toFixed(4)} ETH`,
-    `Source      Clanker v4 factory ${ADDR.clankerFactory} via ${config.rpcUrls.length} free Base RPC endpoint(s)`,
+    `Platforms   ${[...new Set(SOURCES.map((x) => PLATFORM_LABEL[x.platform]))].join(", ")} via ${config.rpcUrls.length} free Base RPC endpoint(s)`,
     `Rules       ${rules.length} loaded (${rules.filter((r) => r.enabled).length} enabled) · database: ${sql.kind === "embedded" ? "embedded Postgres" : "Postgres"}`,
     `Exit        trailing drawdown ${Math.round(config.trailingDrawdown * 100)}% on net liquidation value · max hold ${config.maxHoldMinutes} min`,
     `Dashboard   ${url}`,
@@ -125,7 +132,7 @@ async function main() {
 
   setInterval(() => positions.monitor().catch(() => {}), 5000);
   setInterval(() => screener.housekeeping(), 60_000);
-  setInterval(async () => printStatus({ scanned: screener.stats.scanned, final: screener.stats.final, stream: watcher.state, rpc: rpcStats(),
+  setInterval(async () => printStatus({ scanned: screener.stats.scanned, byPlatform: screener.stats.byPlatform, overflow: screener.stats.overflow, final: screener.stats.final, stream: watcher.state, rpc: rpcStats(),
     open: positions.positions.size, pnl: (await store.pnlSummary()).pnl, mode: "paper", url }), 30_000);
   setInterval(() => store.prune(config.retentionDays).catch(() => {}), 6 * 3600e3);
 
