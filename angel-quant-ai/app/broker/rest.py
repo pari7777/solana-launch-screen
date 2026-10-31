@@ -109,7 +109,14 @@ class AngelRest:
         async with self._login_lock:
             if not self.s.has_angel_credentials:
                 raise AngelError("NOCREDS", "Angel One credentials are not set")
-            totp = pyotp.TOTP(self.s.angel_totp_secret.get_secret_value().replace(" ", "")).now()
+            secret = self.s.angel_totp_secret.get_secret_value().replace(" ", "").strip().upper()
+            if secret.isdigit() or len(secret) < 16:
+                raise AngelError("TOTP_SECRET", "ANGEL_TOTP_SECRET looks wrong: use the long text key shown under the QR code "
+                                                "(letters A–Z and digits 2–7), not the 6-digit code from the app")
+            try:
+                totp = pyotp.TOTP(secret).now()
+            except Exception as e:
+                raise AngelError("TOTP_SECRET", f"ANGEL_TOTP_SECRET is not a valid base32 key ({e})") from e
             body = {"clientcode": self.s.angel_client_code, "password": self.s.angel_mpin.get_secret_value(), "totp": totp}
             data = await self._call("login", body, auth=False, retry_auth=False)
             self.session = Session(jwt=data["jwtToken"], refresh=data["refreshToken"], feed=data["feedToken"],

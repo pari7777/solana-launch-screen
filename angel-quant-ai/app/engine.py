@@ -291,8 +291,10 @@ class Engine:
         while True:
             try:
                 n = now_ist()
-                due = self.last_login_day != n.date() and (n.hour, n.minute) >= (8, 30)
-                retry = not self.rest.logged_in and time.time() - getattr(self, "_last_try", 0) > 60
+                since = time.time() - getattr(self, "_last_try", 0)
+                # never hammer Angel One's login: a failed login is retried at most every 5 minutes
+                due = self.last_login_day != n.date() and (n.hour, n.minute) >= (8, 30) and since > 300
+                retry = not self.rest.logged_in and since > 300
                 if due or retry:
                     self._last_try = time.time()
                     await self._connect()                     # tokens expire at 00:00 IST; instrument master is daily
