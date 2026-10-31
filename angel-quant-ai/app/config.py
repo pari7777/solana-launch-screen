@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # ── Angel One SmartAPI (secrets) ──
     angel_api_key: SecretStr = SecretStr("")
+    # SmartAPI serves candle history only to a "Historical Data" app key (a Trading key gets AG8004 Invalid API Key).
+    # Optional: without it the bot builds candles from live ticks after 09:15.
+    angel_historical_api_key: SecretStr = SecretStr("")
     angel_client_code: str = ""
     angel_mpin: SecretStr = SecretStr("")
     angel_totp_secret: SecretStr = SecretStr("")

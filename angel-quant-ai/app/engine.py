@@ -38,6 +38,8 @@ class Engine:
         self.mode = "live" if not s.live_blockers() else "paper"
         self.limiter = RateLimiter(s.order_rate_per_sec, s.quote_rate_per_sec, s.candle_rate_per_sec, s.other_rate_per_sec)
         self.rest = AngelRest(s, self.limiter)
+        hk = s.angel_historical_api_key.get_secret_value()
+        self.hist_rest = AngelRest(s.model_copy(update={"angel_api_key": s.angel_historical_api_key}), self.limiter) if hk else None
         self.im = InstrumentMaster(s.scrip_master_url, s.data_dir)
         self.md = MarketData()
         self.charges = ChargeModel()
@@ -168,6 +170,13 @@ class Engine:
             self.stream.subscribe(SNAP, exchange, new)
 
     async def _seed_history(self):
+        src = self.hist_rest or self.rest
+        if self.hist_rest and not self.hist_rest.logged_in:
+            try:
+                await self.hist_rest.login()
+            except AngelError as e:
+                self.event("history", f"historical-data login failed: {e}")
+                return
         """Today's and yesterday's 1-minute candles for indices and stocks (REST, rate-limited)."""
         n = now_ist()
         frm = (n - timedelta(days=4)).strftime("%Y-%m-%d 09:15")
@@ -178,10 +187,14 @@ class Engine:
             if not tok:
                 continue
             try:
-                rows = await self.rest.candles(ex, tok, "ONE_MINUTE", frm, to)
+                rows = await src.candles(ex, tok, "ONE_MINUTE", frm, to)
                 self.md.seed(MarketData.key(1, tok), rows)
             except AngelError as e:
                 log.warning("history %s: %s", tok, e)
+                if e.code == "AG8004":
+                    self.event("history", "candle history needs a SmartAPI 'Historical Data' app key (ANGEL_HISTORICAL_API_KEY); "
+                                          "building candles from live ticks instead")
+                    return
 
     async def _refresh_chains(self):
         for u in self.s.underlyings:
