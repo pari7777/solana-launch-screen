@@ -1,0 +1,17 @@
+{
+  "_source": "https://www.angelone.in/exchange-transaction-charges and /support/charges-and-cashbacks/brokerage-charges, read 2026-10-31. Edit here when rates change; the bot also cross-checks against Angel One's estimateCharges API.",
+  "gst_pct": 18.0,
+  "sebi_per_crore": 10.0,
+  "ipft_pct": 0.0000001,
+  "dp_charge_per_isin_sell": 20.0,
+  "segments": {
+    "EQ_DELIVERY": {"brokerage": {"type": "pct_cap", "pct": 0.1, "cap": 20, "min": 5}, "stt_buy_pct": 0.1, "stt_sell_pct": 0.1,
+                    "txn_pct": {"NSE": 0.0030699, "BSE": 0.00375}, "stamp_buy_pct": 0.015},
+    "EQ_INTRADAY": {"brokerage": {"type": "pct_cap", "pct": 0.1, "cap": 20, "min": 5}, "stt_buy_pct": 0.0, "stt_sell_pct": 0.025,
+                    "txn_pct": {"NSE": 0.0030699, "BSE": 0.00375}, "stamp_buy_pct": 0.003},
+    "FUT": {"brokerage": {"type": "flat", "amount": 20}, "stt_buy_pct": 0.0, "stt_sell_pct": 0.05,
+            "txn_pct": {"NSE": 0.0018299, "BSE": 0.0}, "stamp_buy_pct": 0.002},
+    "OPT": {"brokerage": {"type": "flat", "amount": 20}, "stt_buy_pct": 0.0, "stt_sell_pct": 0.15,
+            "txn_pct": {"NSE": 0.0355299, "BSE": 0.0325}, "stamp_buy_pct": 0.003}
+  }
+}

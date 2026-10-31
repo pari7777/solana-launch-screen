@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Angel Quant AI</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14171c;--mut:#646b75;--line:#e3e6ea;--g:#0f8a4b;--r:#c8352b;--a:#b26b00;--b:#2457c5;--chip:#eef1f5}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#171b21;--ink:#e8ebef;--mut:#98a1ad;--line:#262c34;--g:#3ecf82;--r:#ff6b5e;--a:#f0b050;--b:#7aa2ff;--chip:#20262e}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:2}
+h1{font-size:17px;margin:0}h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:0 0 10px}
+.wrap{padding:16px;display:grid;gap:14px;max-width:1400px;margin:0 auto}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.kpi .v{font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.kpi .s{color:var(--mut);font-size:12px}
+.pos{color:var(--g)}.neg{color:var(--r)}.mut{color:var(--mut)}.sm{font-size:12px}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--chip);font-size:12px;margin:0 4px 4px 0}
+.chip.g{color:var(--g)}.chip.r{color:var(--r)}.chip.a{color:var(--a)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 12px;border-radius:8px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--b)}button.danger{border-color:var(--r);color:var(--r)}button.small{padding:3px 8px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:550;font-size:12px}.tw{overflow-x:auto}td.wrap{white-space:normal;min-width:240px}
+.two{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.bar{height:8px;background:var(--chip);border-radius:99px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--a)}
+.banner{padding:10px 14px;border-radius:10px;border:1px solid var(--a);color:var(--a);background:transparent}
+.ev{font-family:ui-monospace,Menlo,monospace;font-size:12px;max-height:260px;overflow:auto}
+a{color:var(--b)}
+</style></head><body>
+<header><div><h1>Angel Quant AI</h1><div class="sm mut" id="sub">connecting…</div></div>
+<div class="btns">
+<button onclick="ctl('start')">Start bot</button><button onclick="ctl('pause')">Pause new entries</button>
+<button onclick="ctl('resume')">Resume bot</button><button onclick="ctl('disable_all')">Disable all strategies</button>
+<button onclick="ctl('enable_all')">Enable all</button>
+<button class="danger" onclick="if(confirm('Square off ALL positions now and block new entries?'))ctl('emergency')">Emergency square-off</button>
+</div></header>
+<div class="wrap">
+<div id="blk"></div>
+<div class="grid">
+<div class="card kpi"><div class="s">Equity</div><div class="v" id="eq">—</div><div class="s" id="cap"></div></div>
+<div class="card kpi"><div class="s">Today net P&amp;L</div><div class="v" id="net">—</div><div class="s" id="netd"></div></div>
+<div class="card kpi"><div class="s">Today gross / charges</div><div class="v" id="gross">—</div><div class="s" id="chg"></div></div>
+<div class="card kpi"><div class="s">Unrealised</div><div class="v" id="unr">—</div><div class="s" id="used"></div></div>
+<div class="card kpi"><div class="s">Market regime</div><div class="v" id="reg">—</div><div class="s" id="regd"></div></div>
+<div class="card kpi"><div class="s">Feed / latency</div><div class="v" id="feed">—</div><div class="s" id="lat"></div></div>
+</div>
+<div class="two">
+<div class="card"><h2>Risk</h2><div id="risk"></div></div>
+<div class="card"><h2>Claude</h2><div id="claude"></div></div>
+</div>
+<div class="card"><h2>Open positions</h2><div class="tw"><table><thead><tr><th>#</th><th>Strategy</th><th>Instrument</th><th>Side</th><th>Qty</th><th>Entry</th><th>Mark</th><th>Stop</th><th>Target</th><th>Unrealised</th><th>Status</th><th></th></tr></thead><tbody id="pos"></tbody></table></div></div>
+<div class="two">
+<div class="card"><h2>Signals (latest)</h2><div class="tw"><table><thead><tr><th>Decision</th><th>Strategy</th><th>Instrument</th><th>Net at target</th><th>Why</th></tr></thead><tbody id="sig"></tbody></table></div></div>
+<div class="card"><h2>Strategy performance</h2><div class="tw"><table><thead><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>Calibrated p</th><th>Net</th><th>PF</th><th>On</th></tr></thead><tbody id="st"></tbody></table></div></div>
+</div>
+<div class="card"><h2>Closed trades — gross → charges → net</h2><div class="tw"><table><thead><tr><th>#</th><th>Strategy</th><th>Instrument</th><th>Gross</th><th>Charges</th><th>Net</th><th>Exit reason</th></tr></thead><tbody id="cl"></tbody></table></div>
+<div class="sm" style="margin-top:8px">Reports: <a href="/api/report/trades?fmt=csv&days=1">today CSV</a> · <a href="/api/report/full?fmt=xlsx&days=1">today Excel</a> · <a href="/api/report/strategy?fmt=xlsx&days=7">weekly</a> · <a href="/api/report/monthly?fmt=xlsx&days=31">monthly</a> · <a href="/api/report/charges?fmt=csv&days=31">charges</a></div></div>
+<div class="card"><h2>Events</h2><div class="ev" id="ev"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr=v=>v==null?'—':(v<0?'−':'')+'₹'+Math.abs(v).toLocaleString('en-IN',{maximumFractionDigits:2});
+const cls=v=>v>0?'pos':v<0?'neg':'';
+async function ctl(a){const r=await fetch('/api/control/'+a,{method:'POST'});const j=await r.json();alert(j.msg)}
+async function ex(id){if(!confirm('Exit position #'+id+'?'))return;const r=await fetch('/api/exit/'+id,{method:'POST'});alert((await r.json()).msg)}
+function render(S){
+ $('sub').textContent=`${S.mode.toUpperCase()} · ${S.status} · ${S.market_open?'market open':'market closed'} · ${S.time} IST · db ${S.db}`;
+ $('blk').innerHTML=S.mode==='paper'?`<div class="banner"><b>Paper trading</b> — real market data, simulated orders. Live orders stay blocked until: ${S.live_blockers.map(esc).join(' · ')}</div>`:'';
+ $('eq').textContent=inr(S.equity);$('cap').textContent=`start ${inr(S.capital)} · all-time net ${inr(S.realized_total)}`;
+ const t=S.today;$('net').textContent=inr(t.net);$('net').className='v '+cls(t.net);$('netd').textContent=`${t.trades} closed trades`;
+ $('gross').textContent=inr(t.gross);$('chg').textContent=`charges ${inr(t.charges)}`;
+ $('unr').textContent=inr(t.unrealized);$('unr').className='v '+cls(t.unrealized);$('used').textContent=`capital in use ${inr(S.used_capital)}`+(S.margin_available!=null?` · margin ${inr(S.margin_available)}`:'');
+ const R=S.regime;$('reg').textContent=R.label;$('regd').textContent=`trend ${R.trend} · ADX ${R.adx??'—'} · VIX ${R.vix??'—'} ${R.tags.join(' ')}`;
+ const F=S.feed,L=S.latency;$('feed').textContent=F.state;$('lat').textContent=`${F.subscribed} tokens · ${F.ticks} ticks · last ${F.last_tick_age??'—'}s · signal→order ${L.signal_to_order_ms_p50??'—'} ms · REST errors ${L.rest_errors}`;
+ const K=S.risk;$('risk').innerHTML=`${K.kill_switch?`<div class="chip r">KILL SWITCH: ${esc(K.kill_switch)}</div>`:''}${K.paused?'<div class="chip a">entries paused</div>':''}${K.health.map(h=>`<div class="chip r">${esc(h)}</div>`).join('')}
+ <div class="sm">Daily loss used ${K.daily_used_pct}% of ${inr(K.daily_limit)}</div><div class="bar"><i style="width:${Math.min(100,K.daily_used_pct)}%"></i></div>
+ <div class="sm" style="margin-top:8px">week ${inr(K.realized_week)} · drawdown ${K.drawdown_pct}% · consecutive losses ${K.consecutive_losses}</div>
+ <div style="margin-top:8px">${Object.entries(K.rejects).map(([k,v])=>`<span class="chip">${esc(k)} ${v}</span>`).join('')}</div>`;
+ const C=S.claude;$('claude').innerHTML=C.enabled?`<div class="sm mut">${esc(C.model)} · approved ${C.stats.approve} · vetoed ${C.stats.veto} · errors ${C.stats.error}</div><p>${esc(C.note.text||'Market note appears after the first 15 minutes of trading.')}</p>${C.recent.slice(0,4).map(r=>`<div class="sm"><span class="chip ${r.verdict==='VETO'?'r':'g'}">${r.verdict}</span>${esc(r.symbol)} — ${esc(r.reason)}</div>`).join('')}`:'<div class="mut">Off. Add ANTHROPIC_API_KEY in Railway Variables to let Claude review trades (it can only veto, never place orders).</div>';
+ $('pos').innerHTML=S.positions.length?S.positions.map(p=>`<tr title="${esc(p.reason)}"><td>${p.id}</td><td>${esc(p.strategy)}</td><td>${esc(p.symbol)}</td><td>${p.side}</td><td>${p.qty}</td><td>${p.entry}</td><td>${p.mark}</td><td>${p.stop}${p.trailing?' ↑':''}</td><td>${p.partial?'trail':p.target}</td><td class="${cls(p.unrealized)}">${inr(p.unrealized)}</td><td>${p.status}</td><td>${['OPEN','PENDING'].includes(p.status)?`<button class="small" onclick="ex(${p.id})">Exit</button>`:''}</td></tr>`).join(''):'<tr><td colspan="12" class="mut">No open positions</td></tr>';
+ $('sig').innerHTML=S.signals.slice(0,15).map(s=>`<tr><td><span class="chip ${s.decision==='TRADED'?'g':s.decision==='VETOED'?'a':''}">${s.decision}</span></td><td>${esc(s.strategy)}</td><td>${esc(s.symbol)}</td><td>${inr(s.plan.net_target)}</td><td class="wrap sm">${esc(s.reason)}</td></tr>`).join('')||'<tr><td colspan="5" class="mut">No signals yet</td></tr>';
+ const en=Object.fromEntries(S.strategies.map(x=>[x.name,x.enabled]));const names=[...new Set([...S.strategies.map(x=>x.name),...S.stats.map(x=>x.strategy)])];
+ const st=Object.fromEntries(S.stats.map(x=>[x.strategy,x]));
+ $('st').innerHTML=names.map(n=>{const x=st[n]||{};return `<tr><td>${esc(n)}</td><td>${x.trades??0}</td><td>${x.win_rate??'—'}</td><td>${x.calibrated_p??'0.4 prior'}</td><td class="${cls(x.net)}">${inr(x.net??0)}</td><td>${x.profit_factor??'—'}</td><td>${en[n]===false?'off':'on'}</td></tr>`}).join('');
+ $('cl').innerHTML=S.closed.length?S.closed.map(c=>`<tr><td>${c.id}</td><td>${esc(c.strategy)}</td><td>${esc(c.symbol)}</td><td class="${cls(c.gross)}">${inr(c.gross)}</td><td>${inr(c.charges)}</td><td class="${cls(c.net)}">${inr(c.net)}</td><td class="sm">${esc(c.exit_reason)}</td></tr>`).join(''):'<tr><td colspan="7" class="mut">No closed trades yet</td></tr>';
+ $('ev').innerHTML=S.events.map(e=>`<div><span class="mut">${e.t}</span> [${esc(e.kind)}] ${esc(e.msg)}</div>`).join('');
+}
+async function poll(){try{const r=await fetch('/api/state');if(r.ok)render(await r.json());}catch(e){$('sub').textContent='connection lost — retrying'}setTimeout(poll,1000)}
+poll();
+</script></body></html>

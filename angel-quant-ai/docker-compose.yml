@@ -1,0 +1,21 @@
+# Local / VPS run:  cp .env.example .env  (fill it in)  →  docker compose up -d
+services:
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://aq:aq@db:5432/aq
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on: [db, redis]
+    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    environment: {POSTGRES_USER: aq, POSTGRES_PASSWORD: aq, POSTGRES_DB: aq}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+volumes:
+  pgdata:

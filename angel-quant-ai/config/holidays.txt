@@ -1,0 +1,2 @@
+# NSE trading holidays, one ISO date per line (YYYY-MM-DD). Update from the NSE circular each year.
+# The bot also treats a weekday with no live ticks after 09:20 as a holiday and makes no trades.
