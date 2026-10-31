@@ -41,6 +41,17 @@ one central risk manager can veto anything, and Claude reviews trades as an advi
 Stay under 10 orders/second per segment (enforced) so no exchange algo registration is needed; above that SEBI requires
 the algo to be registered through the broker.
 
+## Live server with a static IP (AWS Lightsail Mumbai or similar)
+
+1. Create an Ubuntu 24.04 server in Mumbai, attach a static IP, open ports 22, 80 and 443.
+2. In the server's browser SSH window run:
+   `curl -fsSL https://raw.githubusercontent.com/pari7777/solana-launch-screen/main/angel-quant-ai/scripts/vps-setup.sh | sudo bash`
+   It asks for your Angel One details (stored only in `/opt/angel-quant/angel-quant-ai/.env`, mode 600), starts the
+   bot, Postgres, Redis and an HTTPS proxy, and prints the dashboard link, password and IP to register.
+3. Register that IP as the primary static IP of your SmartAPI app.
+4. Code updates: push to GitHub → the server pulls them within 5 minutes, but only outside 09:00–15:40 IST on weekdays
+   (`sudo FORCE=1 aq-update` deploys immediately).
+
 ## Settings
 
 All settings are environment variables — see `.env.example`. Secrets go only into Railway → Variables (or `.env` on a

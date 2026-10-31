@@ -1,4 +1,4 @@
-# Local / VPS run:  cp .env.example .env  (fill it in)  →  docker compose up -d
+# VPS run (see scripts/vps-setup.sh):  docker compose up -d --build
 services:
   bot:
     build: .
@@ -6,9 +6,11 @@ services:
     environment:
       DATABASE_URL: postgresql://aq:aq@db:5432/aq
       REDIS_URL: redis://redis:6379/0
-    ports: ["8000:8000"]
+      TZ: Asia/Kolkata
+    expose: ["8000"]
     depends_on: [db, redis]
     restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: "20m", max-file: "5"}}
   db:
     image: postgres:16-alpine
     environment: {POSTGRES_USER: aq, POSTGRES_PASSWORD: aq, POSTGRES_DB: aq}
@@ -17,5 +19,14 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes: [./deploy/Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data]
+    depends_on: [bot]
+    restart: unless-stopped
 volumes:
   pgdata:
+  caddy_data:

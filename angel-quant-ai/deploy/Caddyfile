@@ -1,0 +1,6 @@
+# HTTPS for the dashboard. DOMAIN defaults to <your-ip>.sslip.io, which points at your server's IP,
+# so Let's Encrypt can issue a certificate without you buying a domain.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy bot:8000
+}
