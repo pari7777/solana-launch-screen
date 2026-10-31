@@ -17,6 +17,9 @@ def main():
     s = get_settings()
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO), stream=sys.stdout,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # httpx logs full request URLs at INFO, which can include session tokens — keep it quiet
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     pw = s.dashboard_password.get_secret_value()
     if not pw:
         pw = secrets.token_urlsafe(9)
