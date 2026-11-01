@@ -158,7 +158,10 @@ export const EVALUATORS: Record<string, Evaluator> = {
     const pc = platformCreator(ev); if (pc) return pc;
     const t = ev.creatorTrace; if (!t) return missing(["creator_wallet_history"], `creator not traced (${ev.creatorTraceError ?? "pending"})`);
     const young = t.txCount < p.min_txs || (t.ageHours !== null && t.ageHours < p.min_age_hours);
-    return young ? trig(`creator wallet is new (${t.txCount} txs sent${t.ageHours !== null ? `, ${t.ageHours.toFixed(1)}h old` : ""})`, { tx_count: t.txCount, age_hours: t.ageHours })
+    const fresh = t.txCount < (p.fresh_txs ?? 3) && (t.ageHours === null || t.ageHours < (p.fresh_age_hours ?? 1));
+    const penalty = fresh ? (p.penalty_fresh ?? 15) : (p.penalty_new ?? 8);
+    return young ? trig(`creator wallet is new (${t.txCount} txs sent${t.ageHours !== null ? `, ${t.ageHours.toFixed(1)}h old` : ""}) — score −${penalty}`,
+                        { tx_count: t.txCount, age_hours: t.ageHours, penalty })
                  : pass(`creator wallet ${t.txCount} txs${t.ageHours !== null ? `, ${Math.round(t.ageHours)}h old` : ""}`, { tx_count: t.txCount, age_hours: t.ageHours });
   } },
   funding_source_unknown: { requires: ["funder"], fn: (ev) => {

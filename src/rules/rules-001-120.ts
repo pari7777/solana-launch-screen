@@ -58,7 +58,10 @@ const rows: Row[] = [
   ["R031", Cw, "CRITICAL", "funding_wallet_flagged", "REJECT", "IGNORE", "creator", "Funding wallet is a known bad actor"],
   ["R032", Cw, "MEDIUM", "creator_share_warning", "WARN", "IGNORE", "creator", "Large privileged creator allocation", { warn_pct: 4, penalty_per_pct: 5 }],
   ["R033", Cw, "MEDIUM", "funding_source_unknown", "WARN", "IGNORE", "creator", "Funding source unknown", undefined, undefined, undefined],
-  ["R034", Cw, "HIGH", "creator_history_too_short", "WAIT", "WAIT", "creator", "Creator wallet has too little history", { min_age_hours: 24, min_txs: 10 }],
+  // Relaxed (owner request): a new deployer wallet no longer blocks the coin — it costs score points instead.
+  // Funding, rugger, cluster and holder rules still reject the dangerous cases.
+  ["R034", Cw, "HIGH", "creator_history_too_short", "WARN", "IGNORE", "creator", "Creator wallet has too little history",
+   { min_age_hours: 24, min_txs: 10, fresh_txs: 3, fresh_age_hours: 1, penalty_new: 8, penalty_fresh: 15 }],
   ["R035", Cw, "MEDIUM", "wallet_graph_ambiguous", "WAIT", "IGNORE", "holders", "Wallet clustering still ambiguous"],
   ["R036", Cw, "LOW", "offchain_identity_claims", "WAIT", "IGNORE", "creator", "Creator identity claims unverified"],
   // ── D. Early buyers, snipers and clusters ──
