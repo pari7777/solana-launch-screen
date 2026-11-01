@@ -39,8 +39,8 @@ export const config = {
   devDumpPct: num("DEV_DUMP_PCT", 70),
   serviceNonce: num("SERVICE_NONCE", 5000),      // a funder with this many sent txs is an exchange / bot
   rulesOverridePath: env("RULES_OVERRIDE_PATH", "./rules-overrides.json"),
-  ruleResultsStore: env("RULE_RESULTS_STORE", "nonpass") as "all" | "nonpass" | "triggered",
-  retentionDays: num("RETENTION_DAYS", 14),
+  ruleResultsStore: env("RULE_RESULTS_STORE", "triggered") as "all" | "nonpass" | "triggered",
+  retentionDays: num("RETENTION_DAYS", 3),        // the shared Railway Postgres volume is small (500 MB)
 
   // ── trading (paper) ──
   buyEth: num("BUY_ETH", 0.01),

@@ -55,8 +55,8 @@ export const config = {
   devDumpPct: num("DEV_DUMP_PCT", 70),
   serviceSpanMinutes: num("SERVICE_SPAN_MINUTES", 60),
   rulesOverridePath: env("RULES_OVERRIDE_PATH", "./config/rules-overrides.json"),
-  ruleResultsStore: env("RULE_RESULTS_STORE", "nonpass") as "all" | "nonpass" | "triggered",
-  retentionDays: num("RETENTION_DAYS", 14),
+  ruleResultsStore: env("RULE_RESULTS_STORE", "triggered") as "all" | "nonpass" | "triggered",
+  retentionDays: num("RETENTION_DAYS", 3),        // the shared Railway Postgres volume is small (500 MB)
 
   // ── trading ──
   buySol: num("BUY_SOL", 0.05),

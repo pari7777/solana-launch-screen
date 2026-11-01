@@ -134,7 +134,8 @@ async function main() {
   setInterval(() => screener.housekeeping(), 60_000);
   setInterval(async () => printStatus({ scanned: screener.stats.scanned, byPlatform: screener.stats.byPlatform, overflow: screener.stats.overflow, final: screener.stats.final, stream: watcher.state, rpc: rpcStats(),
     open: positions.positions.size, pnl: (await store.pnlSummary()).pnl, mode: "paper", url }), 30_000);
-  setInterval(() => store.prune(config.retentionDays).catch(() => {}), 6 * 3600e3);
+  store.prune(config.retentionDays).catch((e) => console.error("prune", e.message));
+  setInterval(() => store.prune(config.retentionDays).catch(() => {}), 3600e3);
 
   const shutdown = async () => {
     console.log("\nSaving and shutting down…");

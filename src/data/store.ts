@@ -184,5 +184,9 @@ export class Store {
     await this.sql.query("DELETE FROM rule_results WHERE evaluated_at < now() - $1::interval", [i]);
     await this.sql.query("DELETE FROM decision_history WHERE created_at < now() - $1::interval", [i]);
     await this.sql.query("DELETE FROM launches WHERE received_at < now() - $1::interval", [i]);
+    // wallet_edges has no timestamp: keep the newest 150k edges for this chain
+    await this.sql.query(
+      `DELETE FROM wallet_edges WHERE chain = $1 AND ctid IN (SELECT ctid FROM wallet_edges WHERE chain = $1 ORDER BY slot ASC
+         LIMIT GREATEST(0, (SELECT COUNT(*) FROM wallet_edges WHERE chain = $1) - 150000))`, [CHAIN]);
   }
 }
