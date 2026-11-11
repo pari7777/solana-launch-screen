@@ -2,7 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": { "builder": "RAILPACK" },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "sh scripts/start.sh",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ALWAYS",
