@@ -202,9 +202,26 @@ class Engine:
             except AngelError as e:
                 log.warning("history %s: %s", tok, e)
                 if e.code == "AG8004":
-                    self.event("history", "candle history needs a SmartAPI 'Historical Data' app key (ANGEL_HISTORICAL_API_KEY); "
-                                          "building candles from live ticks instead")
+                    await self._seed_from_yahoo()
                     return
+
+    async def _seed_from_yahoo(self):
+        """Angel One refuses past candles for this key (AG8004): warm up from Yahoo Finance's public 1-minute bars instead."""
+        from .market import yahoo
+        items = [(self.im.index_token(u), yahoo.ticker(u, index=True)) for u in self.s.underlyings]
+        items += [(self.im.equity[x].token, yahoo.ticker(x)) for x in self.s.stocks if x in self.im.equity]
+        items = [(t, y) for t, y in items if t]
+        try:
+            got = await yahoo.candles_many(items)
+        except Exception as ex:  # noqa: BLE001
+            got = {}
+            log.warning("yahoo history: %s", ex)
+        for tok, rows in got.items():
+            self.md.seed(MarketData.key(1, tok), rows)
+        bars = sum(len(r) for r in got.values())
+        self.event("history", f"Angel One gives no past candles for this key (AG8004); loaded {bars:,} one-minute bars for "
+                              f"{len(got)} of {len(items)} instruments from Yahoo Finance instead"
+                   if got else "past candles unavailable (Angel One AG8004, Yahoo Finance unreachable): building candles from live ticks")
 
     async def _refresh_chains(self):
         for u in self.s.underlyings:
