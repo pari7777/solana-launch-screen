@@ -25,10 +25,20 @@ class StockStrategy(Strategy):
     kind = "intraday"
 
     def stocks(self):
-        for name in self.ctx.s.stocks:
+        """The day's shortlist (most active mid/small caps), skipping any stock whose bid–ask gap is too wide right now."""
+        names = self.ctx.shortlist() if hasattr(self.ctx, "shortlist") else self.ctx.s.stocks
+        lim = getattr(self.ctx.s, "max_stock_spread_pct", 0) or 0
+        for name in names:
             ins = self.ctx.im.equity.get(name)
-            if ins:
-                yield name, ins, self.ctx.key_for(ins)
+            if not ins:
+                continue
+            k = self.ctx.key_for(ins)
+            if lim:
+                t = self.ctx.md.ticks.get(k)
+                sp = t.spread_pct if t else None
+                if sp is not None and sp > lim:
+                    continue
+            yield name, ins, k
 
     def plan(self, ins, name, side, entry, stop, target, reason, sid) -> TradePlan:
         tick = ins.tick

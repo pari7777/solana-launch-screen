@@ -286,3 +286,13 @@ def test_universe_csv_parse():
     from app.market.universe import parse
     text = "Company Name,Industry,Symbol,Series,ISIN Code\nFederal Bank Ltd.,Financial Services,FEDERALBNK,EQ,INE171A01029\nX,Y,ABCBE,BE,INE0\n"
     assert parse(text) == ["FEDERALBNK"]
+
+
+def test_paper_test_card():
+    from datetime import date, datetime, timezone
+    from app.api.server import test_card
+    rows = [{"gross": 300, "charges": 30, "closed_at": datetime(2026, 11, 16, 6, tzinfo=timezone.utc)},
+            {"gross": -200, "charges": 30, "closed_at": datetime(2026, 11, 17, 6, tzinfo=timezone.utc)}]
+    c = test_card(rows, date(2026, 11, 16), 30)
+    assert c["trades"] == 2 and c["net"] == 40 and c["win_rate"] == 50.0 and c["profit_factor"] == round(270 / 230, 2)
+    assert c["worst_day"] == -230 and c["days_traded"] == 2

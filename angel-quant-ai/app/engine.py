@@ -271,6 +271,30 @@ class Engine:
             return f"paper profit factor {pf:.2f} < {s.acceptance_min_profit_factor}"
         return ""
 
+    def shortlist(self) -> list[str]:
+        """Most active stocks today: turnover × |move from open|, top SHORTLIST_SIZE, recomputed every 15 minutes."""
+        n = self.s.shortlist_size
+        stocks = self.s.stocks
+        if not n or n >= len(stocks) or self.minutes_since_open() < 15:
+            return stocks
+        slot = (self.today(), int(self.minutes_since_open()) // 15)
+        if getattr(self, "_sl_slot", None) == slot:
+            return self._sl
+        score = []
+        for name in stocks:
+            ins = self.im.equity.get(name)
+            ser = self.md.series.get(self.key_for(ins)) if ins else None
+            if not ser:
+                continue
+            ts, o, h, l, c, v = ser.session()
+            if len(c) < 5 or o[0] <= 0:
+                continue
+            score.append(((c * v).sum() * abs(c[-1] / o[0] - 1), name))
+        score.sort(reverse=True)
+        self._sl, self._sl_slot = [x for _, x in score[:n]] or stocks, slot
+        self.event("shortlist", "today's most active: " + ", ".join(self._sl))
+        return self._sl
+
     async def _load_universe(self):
         """Mid & small caps from the official NSE index lists (once a day); the static list is the fallback."""
         from app.market.universe import fetch

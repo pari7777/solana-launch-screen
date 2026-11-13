@@ -50,6 +50,10 @@ class Settings(BaseSettings):
                            "BAJFINANCE,MARUTI,TATAMOTORS,SUNPHARMA,M&M,TITAN,ULTRACEMCO,NTPC")
     # official NSE index lists downloaded each day (mid & small caps by default); empty = use STOCK_UNIVERSE only
     stock_universe_indexes: str = "NIFTY MIDCAP SELECT,NIFTY SMALLCAP 50"
+    paper_test_start: str = "2026-11-16"         # owner 13 Nov 2026: 30-day paper test of the stocks-only mid/small-cap plan
+    paper_test_days: int = 30
+    shortlist_size: int = 10                    # trade only the day's N most active stocks (turnover × move), refreshed every 15 min
+    max_stock_spread_pct: float = 0.15          # skip a stock while its bid–ask gap is wider than this (thin small caps)
     universe_keep_static: bool = False          # true: trade STOCK_UNIVERSE (large caps) as well
     # used when the index lists cannot be downloaded: Nifty Midcap Select top 10 (factsheet 30 Oct 2026) + Smallcap 50 names
     midsmall_fallback: str = ("FEDERALBNK,MCX,INDHOTEL,PAYTM,HEROMOTOCO,PERSISTENT,BHEL,INDUSINDBK,AUBANK,GVT&D,"

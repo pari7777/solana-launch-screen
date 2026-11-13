@@ -82,7 +82,8 @@ async def test_engine_pipeline_cost_check_risk_and_paper_order(settings, im, mon
     from app.engine import Engine
     from app.market.regime import Regime
     from app.strategies.base import TradePlan
-    s = settings.model_copy(update={"no_new_entries_after": dtime(23, 59), "square_off_intraday_at": dtime(23, 59, 59)})
+    s = settings.model_copy(update={"no_new_entries_after": dtime(23, 59), "square_off_intraday_at": dtime(23, 59, 59),
+                                    "enable_options_scalping": True})   # options are off by default (stocks only)
     e = Engine(s)
     e.im = im
     e.oms.im = im

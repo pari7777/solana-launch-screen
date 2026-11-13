@@ -79,6 +79,17 @@ def build_app(engine: Engine, password: str) -> FastAPI:
     async def exit_pos(pid: int):
         return {"msg": await engine.exit_position(pid)}
 
+    @app.get("/api/test-report", dependencies=[Depends(auth)])
+    async def test_report():
+        """30-day paper test report card: net after charges, profit factor, win rate, worst day."""
+        from datetime import date as _d
+        start = _d.fromisoformat(engine.s.paper_test_start)
+        tz = now_ist().tzinfo
+        since = datetime(start.year, start.month, start.day, tzinfo=tz).astimezone(timezone.utc)
+        rows = [r for r in await engine.store.closed(since=since, limit=5000, mode="paper")
+                if not str(r.get("strategy", "")).startswith("opt_")]
+        return JSONResponse(test_card(rows, start, engine.s.paper_test_days))
+
     @app.get("/api/report/{kind}", dependencies=[Depends(auth)])
     async def report(kind: str, fmt: str = "csv", days: int = 1):
         from app.reports.export import build_report
@@ -88,6 +99,32 @@ def build_app(engine: Engine, password: str) -> FastAPI:
         return StreamingResponse(io.BytesIO(data), media_type=mime, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     return app
+
+
+def test_card(rows: list[dict], start, days: int) -> dict:
+    tz = now_ist().tzinfo
+    def day(r):
+        v = r.get("closed_at")
+        v = datetime.fromtimestamp(v, tz=timezone.utc) if isinstance(v, (int, float)) else v
+        return v.astimezone(tz).date() if v else None
+    nets = [(r.get("gross") or 0) - (r.get("charges") or 0) for r in rows]
+    by_day: dict = {}
+    for r, n in zip(rows, nets):
+        d = day(r)
+        if d:
+            by_day[d] = by_day.get(d, 0) + n
+    wins = [n for n in nets if n > 0]
+    losses = [-n for n in nets if n <= 0]
+    today = now_ist().date()
+    end = start + timedelta(days=days)
+    return {"start": start.isoformat(), "end": end.isoformat(), "day": max(0, min(days, (today - start).days + 1)), "days": days,
+            "trades": len(rows), "gross": round(sum(r.get("gross") or 0 for r in rows), 2),
+            "charges": round(sum(r.get("charges") or 0 for r in rows), 2), "net": round(sum(nets), 2),
+            "win_rate": round(len(wins) / len(nets) * 100, 1) if nets else None,
+            "profit_factor": round(sum(wins) / sum(losses), 2) if losses and sum(losses) > 0 else None,
+            "avg_win": round(sum(wins) / len(wins), 2) if wins else None, "avg_loss": round(sum(losses) / len(losses), 2) if losses else None,
+            "worst_day": round(min(by_day.values()), 2) if by_day else None, "best_day": round(max(by_day.values()), 2) if by_day else None,
+            "days_traded": len(by_day), "by_day": [{"day": d.isoformat(), "net": round(v, 2)} for d, v in sorted(by_day.items())]}
 
 
 def snapshot(e: Engine) -> dict:

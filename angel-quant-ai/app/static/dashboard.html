@@ -42,6 +42,7 @@ a{color:var(--b)}
 <div class="card kpi"><div class="s">Market regime</div><div class="v" id="reg">—</div><div class="s" id="regd"></div></div>
 <div class="card kpi"><div class="s">Feed / latency</div><div class="v" id="feed">—</div><div class="s" id="lat"></div></div>
 </div>
+<div class="card" id="testcard"><h2>30-day paper test — stocks only (mid &amp; small caps)</h2><div id="tc">loading…</div></div>
 <div class="two">
 <div class="card"><h2>Risk</h2><div id="risk"></div></div>
 <div class="card"><h2>Claude</h2><div id="claude"></div></div>
@@ -84,6 +85,14 @@ function render(S){
  $('cl').innerHTML=S.closed.length?S.closed.map(c=>`<tr><td>${c.id}</td><td>${esc(c.strategy)}</td><td>${esc(c.symbol)}</td><td class="${cls(c.gross)}">${inr(c.gross)}</td><td>${inr(c.charges)}</td><td class="${cls(c.net)}">${inr(c.net)}</td><td class="sm">${esc(c.exit_reason)}</td></tr>`).join(''):'<tr><td colspan="7" class="mut">No closed trades yet</td></tr>';
  $('ev').innerHTML=S.events.map(e=>`<div><span class="mut">${e.t}</span> [${esc(e.kind)}] ${esc(e.msg)}</div>`).join('');
 }
+const R=v=>v==null?'—':'₹'+Number(v).toLocaleString('en-IN',{maximumFractionDigits:0});
+async function tcard(){try{const r=await fetch('/api/test-report');if(r.ok){const t=await r.json();
+const ok=t.net>0&&(t.profit_factor||0)>=1.3;
+$('tc').innerHTML=`<div class="s">Day ${t.day} of ${t.days} · ${t.start} → ${t.end} · ${t.days_traded} trading days</div>
+<table><tr><th>Trades</th><th>Gross</th><th>Charges</th><th>Net after charges</th><th>Win %</th><th>Profit factor</th><th>Avg win / loss</th><th>Best / worst day</th></tr>
+<tr><td>${t.trades}</td><td>${R(t.gross)}</td><td>${R(t.charges)}</td><td><b style="color:${t.net>=0?'#15803d':'#b91c1c'}">${R(t.net)}</b></td><td>${t.win_rate??'—'}%</td><td>${t.profit_factor??'—'}</td><td>${R(t.avg_win)} / ${R(t.avg_loss)}</td><td>${R(t.best_day)} / ${R(t.worst_day)}</td></tr></table>
+<div class="s">${t.trades<20?'Too few trades yet to judge.':ok?'So far: positive after charges with profit factor ≥ 1.3.':'So far: not yet positive after charges (needs net > 0 and profit factor ≥ 1.3).'}</div>`}}catch(e){}setTimeout(tcard,60000)}
+tcard();
 async function poll(){try{const r=await fetch('/api/state');if(r.ok)render(await r.json());}catch(e){$('sub').textContent='connection lost — retrying'}setTimeout(poll,1000)}
 poll();
 </script></body></html>
