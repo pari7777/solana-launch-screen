@@ -280,3 +280,9 @@ async def test_login_sends_totp_and_retries_on_auth_error(settings):
     h = [h for p, h in seen if p.endswith("getOrderBook")][-1]
     assert h["authorization"] == "Bearer J" and h["x-privatekey"] == "k"
     await rest.close()
+
+
+def test_universe_csv_parse():
+    from app.market.universe import parse
+    text = "Company Name,Industry,Symbol,Series,ISIN Code\nFederal Bank Ltd.,Financial Services,FEDERALBNK,EQ,INE171A01029\nX,Y,ABCBE,BE,INE0\n"
+    assert parse(text) == ["FEDERALBNK"]

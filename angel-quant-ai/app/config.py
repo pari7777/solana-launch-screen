@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # ── universe ──
     stock_universe: str = ("RELIANCE,HDFCBANK,ICICIBANK,INFY,TCS,SBIN,AXISBANK,KOTAKBANK,LT,BHARTIARTL,ITC,HINDUNILVR,"
                            "BAJFINANCE,MARUTI,TATAMOTORS,SUNPHARMA,M&M,TITAN,ULTRACEMCO,NTPC")
+    # official NSE index lists downloaded each day (mid & small caps by default); empty = use STOCK_UNIVERSE only
+    stock_universe_indexes: str = "NIFTY MIDCAP SELECT,NIFTY SMALLCAP 50"
+    universe_keep_static: bool = False          # true: trade STOCK_UNIVERSE (large caps) as well
+    # used when the index lists cannot be downloaded: Nifty Midcap Select top 10 (factsheet 30 Oct 2026) + Smallcap 50 names
+    midsmall_fallback: str = ("FEDERALBNK,MCX,INDHOTEL,PAYTM,HEROMOTOCO,PERSISTENT,BHEL,INDUSINDBK,AUBANK,GVT&D,"
+                              "AEGISLOG,APOLLOTYRE,GESHIP,TATACHEM,HFCL")
     option_underlyings: str = "NIFTY,BANKNIFTY,FINNIFTY"
 
     # ── strategy switches ──

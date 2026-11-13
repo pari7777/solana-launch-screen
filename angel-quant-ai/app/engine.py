@@ -271,6 +271,27 @@ class Engine:
             return f"paper profit factor {pf:.2f} < {s.acceptance_min_profit_factor}"
         return ""
 
+    async def _load_universe(self):
+        """Mid & small caps from the official NSE index lists (once a day); the static list is the fallback."""
+        from app.market.universe import fetch
+        names = [x.strip() for x in (self.s.stock_universe_indexes or "").split(",") if x.strip()]
+        if not names:
+            return
+        if not hasattr(self, "_static_universe"):
+            self._static_universe = self.s.stock_universe
+        syms, notes = await fetch(names)
+        syms = [x for x in syms if x in self.im.equity]
+        if syms:
+            keep = [x for x in self._static_universe.split(",") if x.strip()] if self.s.universe_keep_static else []
+            merged = list(dict.fromkeys([k.strip().upper() for k in keep] + syms))
+            self.s.stock_universe = ",".join(merged)
+            self.event("universe", f"{len(merged)} stocks from {', '.join(names)}" + (f" ({'; '.join(notes)})" if notes else ""))
+        else:
+            fb = [x.strip().upper() for x in (self.s.midsmall_fallback or "").split(",") if x.strip().upper() in self.im.equity]
+            self.s.stock_universe = ",".join(fb) if fb else self._static_universe
+            self.event("universe", f"index lists unavailable ({'; '.join(notes) or 'empty'}): using "
+                                   + (f"{len(fb)} saved mid/small caps" if fb else "the static list"))
+
     async def _connect(self):
         try:
             await self.rest.login()
@@ -281,6 +302,7 @@ class Engine:
             self.status = f"login/instrument error: {e}"
             self.event("error", self.status)
             return
+        await self._load_universe()
         idx = [self.im.index_token(u) for u in self.s.underlyings] + [self.im.index_token("INDIAVIX")]
         self._subscribe("NSE", [t for t in idx if t])
         self._subscribe("NSE", [self.im.equity[x].token for x in self.s.stocks if x in self.im.equity])
