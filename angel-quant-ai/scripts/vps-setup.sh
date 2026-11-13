@@ -35,6 +35,7 @@ ask ANGEL_API_KEY "Angel One SmartAPI API key" secret
 ask ANGEL_CLIENT_CODE "Angel One client ID"
 ask ANGEL_MPIN "Angel One MPIN" secret
 ask ANGEL_TOTP_SECRET "TOTP secret (text key under the QR code)" secret
+ask ANGEL_HISTORICAL_API_KEY "SmartAPI Historical Data app key (for past candles; Enter to skip)" secret
 ask ANTHROPIC_API_KEY "Anthropic API key for Claude (optional, Enter to skip)" secret
 grep -q "^DASHBOARD_PASSWORD=" "$ENV" || setv DASHBOARD_PASSWORD "$(tr -dc 'A-HJ-NP-Za-km-z2-9' </dev/urandom | head -c 14)"
 grep -q "^TRADING_MODE=" "$ENV" || { setv TRADING_MODE paper; setv LIVE_TRADING_CONFIRM NO; setv STATIC_IP_REGISTERED false; }
