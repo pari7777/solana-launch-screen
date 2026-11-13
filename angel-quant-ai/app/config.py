@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     news_enabled: bool = True
     news_every_min: int = 15
     news_block_score: float = 0.5               # skip a long when the stock's news score ≤ −0.5 (short when ≥ +0.5)
+    flow_enabled: bool = True                   # big-player flow (book pressure, big prints, bulk/block deals) + manipulation guard
+    flow_block_score: float = 0.45              # skip a long when big-player flow ≤ −0.45 (short when ≥ +0.45)
+    flow_big_print_rupees: float = 1_000_000.0  # one tick worth ≥ ₹10 lakh counts as a big print
     learn_enabled: bool = True
     learn_lookback_days: int = 20               # trading days of closed trades the loop looks at
     learn_min_trades: int = 15                  # less evidence than this → no change

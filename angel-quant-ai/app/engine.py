@@ -66,6 +66,9 @@ class Engine:
             self.strategies += [DebitSpread(self), IronCondor(self)]
         from app.ai.learn import Learner
         from app.ai.news import NewsBrain
+        from app.market.flow import FlowBrain
+        self.flow = FlowBrain(self)                       # big players: book pressure, big prints, bulk/block deals, manipulation guard
+        self._tok2sym: dict[str, str] = {}
         self.news = NewsBrain(self)                       # news & sentiment (Claude when a key is set, else a word list)
         self.learner = Learner(self)                      # daily learning loop: size weights + pauses per strategy
         self.running = True
@@ -160,6 +163,9 @@ class Engine:
 
     def _on_tick(self, t: Tick):
         self.md.on_tick(t)
+        sym = self._tok2sym.get(t.token) if t.exchange_type == 1 else None
+        if sym and self.s.flow_enabled:
+            self.flow.on_tick(sym, t)
         self.broker.on_tick(MarketData.key(t.exchange_type, t.token))
 
     async def _on_stream_state(self, st: str):
@@ -338,6 +344,12 @@ class Engine:
         idx = [self.im.index_token(u) for u in self.s.underlyings] + [self.im.index_token("INDIAVIX")]
         self._subscribe("NSE", [t for t in idx if t])
         self._subscribe("NSE", [self.im.equity[x].token for x in self.s.stocks if x in self.im.equity])
+        self._tok2sym = {self.im.equity[x].token: x for x in self.s.stocks if x in self.im.equity}
+        if self.s.flow_enabled:
+            try:
+                await self.flow.daily()                     # yesterday's bulk/block deals + surveillance list
+            except Exception as ex:  # noqa: BLE001
+                log.warning("flow daily: %s", ex)
         await self._seed_history()
         await self._refresh_margin()
         self.status = "connected"
@@ -442,6 +454,15 @@ class Engine:
                 news = self.news.get(plan.underlying) if self.s.news_enabled else None
                 if not why and self.s.news_enabled and plan.ins.lot <= 1:
                     why = self.news.gate(plan.underlying, side)
+                if not why and self.s.flow_enabled and plan.ins.lot <= 1:
+                    mv = vr = None
+                    ser = self.md.series.get(self.key_for(plan.ins))
+                    if ser:
+                        ts, o, h, l, c, v = ser.session()
+                        if len(c) >= 5 and o[0] > 0:
+                            mv = (c[-1] / o[0] - 1) * 100
+                            vr = (v[-5:].mean() / v[:-5].mean()) if len(v) > 10 and v[:-5].mean() > 0 else None
+                    why = self.flow.gate(plan.underlying, side, mv, vr, news["score"] if news else None)
                 if not why:
                     fam = FAMILY.get(plan.strategy, plan.strategy)
                     used = sum(p.capital for p in positions if p.is_open and FAMILY.get(p.strategy) == fam)
@@ -455,6 +476,8 @@ class Engine:
                     self.store.signal(plan.strategy, plan.ins.symbol, "REJECTED", why, plan.summary())
                     continue
                 summ = plan.summary()
+                if self.s.flow_enabled and plan.ins.lot <= 1:
+                    summ["big_players"] = self.flow.summary(plan.underlying)
                 if news:
                     summ["news"] = {"score": news["score"], "why": news.get("why"), "headlines": [h["title"] for h in news["headlines"][:4]]}
                 ctx = self._context()
