@@ -121,7 +121,7 @@ def snapshot(e: Engine) -> dict:
         "stats": e.stats.table(),
         "feed": {"state": e.stream.state, "ticks": e.md.tick_count, "subscribed": len(e.subscribed), "reconnects": e.stream.reconnects,
                  "last_tick_age": round(time.time() - e.md.last_tick_at, 1) if e.md.last_tick_at else None},
-        "latency": {"rest": lat, "rest_calls": e.rest.latency.calls, "rest_errors": e.rest.latency.errors,
+        "latency": {"rest": lat, "rest_calls": e.rest.latency.calls, "rest_errors": e.rest.latency.errors, "rest_errors_by": e.rest.latency.errors_by, "rest_last_error": e.rest.latency.last_error,
                     "signal_to_order_ms_p50": round(sig_lat[len(sig_lat) // 2], 1) if sig_lat else None,
                     "order_ack_ms": [round(o.ack_ms, 0) for o in list(e.oms.orders.values())[-10:] if o.ack_ms]},
         "instruments": {"source": e.im.source, "count": len(e.im.by_token)},

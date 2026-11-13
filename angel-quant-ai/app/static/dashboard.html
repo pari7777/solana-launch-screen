@@ -70,7 +70,7 @@ function render(S){
  $('gross').textContent=inr(t.gross);$('chg').textContent=`charges ${inr(t.charges)}`;
  $('unr').textContent=inr(t.unrealized);$('unr').className='v '+cls(t.unrealized);$('used').textContent=`capital in use ${inr(S.used_capital)}`+(S.margin_available!=null?` · margin ${inr(S.margin_available)}`:'');
  const R=S.regime;$('reg').textContent=R.label;$('regd').textContent=`trend ${R.trend} · ADX ${R.adx??'—'} · VIX ${R.vix??'—'} ${R.tags.join(' ')}`;
- const F=S.feed,L=S.latency;$('feed').textContent=F.state;$('lat').textContent=`${F.subscribed} tokens · ${F.ticks} ticks · last ${F.last_tick_age??'—'}s · signal→order ${L.signal_to_order_ms_p50??'—'} ms · REST errors ${L.rest_errors}`;
+ const F=S.feed,L=S.latency;$('feed').textContent=F.state;$('lat').textContent=`${F.subscribed} tokens · ${F.ticks} ticks · last ${F.last_tick_age??'—'}s · signal→order ${L.signal_to_order_ms_p50??'—'} ms · REST errors ${L.rest_errors}${L.rest_errors_by&&Object.keys(L.rest_errors_by).length?' ('+Object.entries(L.rest_errors_by).map(([k,v])=>k+' '+v).join(', ')+')':''}${L.rest_last_error?' · last: '+L.rest_last_error:''}`;
  const K=S.risk;$('risk').innerHTML=`${K.kill_switch?`<div class="chip r">KILL SWITCH: ${esc(K.kill_switch)}</div>`:''}${K.paused?'<div class="chip a">entries paused</div>':''}${K.health.map(h=>`<div class="chip r">${esc(h)}</div>`).join('')}
  <div class="sm">Daily loss used ${K.daily_used_pct}% of ${inr(K.daily_limit)}</div><div class="bar"><i style="width:${Math.min(100,K.daily_used_pct)}%"></i></div>
  <div class="sm" style="margin-top:8px">week ${inr(K.realized_week)} · drawdown ${K.drawdown_pct}% · consecutive losses ${K.consecutive_losses}</div>

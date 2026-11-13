@@ -65,6 +65,13 @@ class Latency:
     samples: dict[str, list[float]] = field(default_factory=dict)
     errors: int = 0
     calls: int = 0
+    errors_by: dict[str, int] = field(default_factory=dict)   # which Angel One call fails, and how often
+    last_error: str = ""
+
+    def fail(self, name: str, why: str) -> None:
+        self.errors += 1
+        self.errors_by[name] = self.errors_by.get(name, 0) + 1
+        self.last_error = f"{name}: {why}"[:160]
 
     def add(self, name: str, ms: float):
         s = self.samples.setdefault(name, [])
@@ -152,12 +159,12 @@ class AngelRest:
             else:
                 r = await self.http.post(path + suffix, headers=self._headers(auth), json=body or {})
         except httpx.HTTPError as e:
-            self.latency.errors += 1
+            self.latency.fail(name, f"network {type(e).__name__}")
             raise AngelError("NETWORK", str(e)) from e
         finally:
             self.latency.add(name, (time.perf_counter() - t0) * 1000)
         if r.status_code == 403 or r.status_code == 401:
-            self.latency.errors += 1
+            self.latency.fail(name, f"HTTP {r.status_code} {r.text[:80]}")
             if retry_auth and auth:
                 await self.login()
                 return await self._call(name, body, method, auth, retry_auth=False, suffix=suffix)
@@ -165,11 +172,11 @@ class AngelRest:
         try:
             j = r.json()
         except ValueError:
-            self.latency.errors += 1
+            self.latency.fail(name, f"HTTP {r.status_code} not JSON")
             raise AngelError(f"HTTP{r.status_code}", r.text[:200])
         if not j.get("status", False) and j.get("message") != "SUCCESS":
-            self.latency.errors += 1
             code = str(j.get("errorcode") or j.get("errorCode") or "UNKNOWN")
+            self.latency.fail(name, f"{code} {str(j.get('message') or '')[:80]}")
             if retry_auth and auth and code in AUTH_ERRORS:
                 await self.login()
                 return await self._call(name, body, method, auth, retry_auth=False, suffix=suffix)
