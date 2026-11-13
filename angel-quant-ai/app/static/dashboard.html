@@ -70,7 +70,8 @@ const rows=Object.entries(N.stocks||{}).map(([k,v])=>`<tr><td>${k}</td><td style
 const w=Object.entries(L.weights||{}).map(([k,v])=>`${k} ${Number(v).toFixed(1)}×`).join(' · ')||'all 1.0× (learning starts after enough trades)';
 const pz=Object.keys(L.paused||{}).length?' · paused: '+Object.entries(L.paused).map(([k,v])=>`${k} (${v} days)`).join(', '):'';
 const lg=(L.log||[]).slice(0,3).map(x=>`<div class="s"><b>${x.day}</b>: ${x.changes.join('; ')}${x.note?'<br>'+x.note.replace(/</g,'&lt;').replace(/\n/g,'<br>'):''}</div>`).join('');
-$('brain').innerHTML=`<div class="s">Market news: <b style="color:${col((N.market||{}).score)}">${sc((N.market||{}).score)}</b> ${((N.market||{}).why||'')}</div>
+const P=N.premarket||{};const pm=P.day?`<div class="s"><b>Morning brief ${P.day}</b> · ${P.stocks} stocks checked · positive: ${(P.positive||[]).join(', ')||'—'} · negative: ${(P.negative||[]).join(', ')||'—'} · event days (skipped): ${(P.events||[]).join(', ')||'—'}${P.brief?'<br>'+P.brief.replace(/</g,'&lt;').replace(/\n/g,'<br>'):''}</div>`:'<div class="s">Morning brief: runs at 8:35–9:10 am before the open</div>';
+$('brain').innerHTML=pm+`<div class="s">Market news: <b style="color:${col((N.market||{}).score)}">${sc((N.market||{}).score)}</b> ${((N.market||{}).why||'')}</div>
 <div class="tw"><table><thead><tr><th>Stock</th><th>Sentiment</th><th>Why / headline</th></tr></thead><tbody>${rows||'<tr><td colspan=3>No news check yet (runs every '+(N.every_min||30)+' min, 8:45–15:15)</td></tr>'}</tbody></table></div>
 <div class="s">Strategy size weights: ${w}${pz}</div>${lg}`}catch(err){}
  $('sub').textContent=`${S.mode.toUpperCase()} · ${S.status} · ${S.market_open?'market open':'market closed'} · ${S.time} IST · db ${S.db}`;

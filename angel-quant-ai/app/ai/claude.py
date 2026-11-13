@@ -44,11 +44,11 @@ class ClaudeReviewer:
         self.calls = [t for t in self.calls if t > now - 3600]
         return len(self.calls) < self.s.claude_max_calls_per_hour
 
-    async def _ask(self, system: str, user: str, max_tokens: int = 200) -> str:
+    async def _ask(self, system: str, user: str, max_tokens: int = 200, timeout: float | None = None) -> str:
         self.calls.append(time.time())
         r = await asyncio.wait_for(self.client.messages.create(model=self.s.claude_model, max_tokens=max_tokens, system=system,
                                                                messages=[{"role": "user", "content": user}]),
-                                   timeout=self.s.claude_timeout_s)
+                                   timeout=timeout or self.s.claude_timeout_s)
         return "".join(getattr(b, "text", "") for b in r.content).strip()
 
     async def review(self, plan_summary: dict, context: dict) -> dict:

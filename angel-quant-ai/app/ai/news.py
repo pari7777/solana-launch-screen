@@ -1,6 +1,8 @@
 """News & sentiment for the AI brain.
 
-Every 15 minutes during the trading day (08:45–15:15 IST) it collects recent headlines for the market and for each stock on
+Before the open (08:35–09:10 IST, once a day) it collects global and Indian cues (GIFT Nifty, US and Asian markets, crude,
+rupee, FII/DII, RBI) and news for EVERY stock in the universe, scores them and writes a short morning brief.
+Then every 15 minutes during the session (09:30–15:15) it collects recent headlines for the market and for each stock on
 the day's shortlist from Google News RSS (India edition, last 24 h), and scores each stock from −1 (clearly negative)
 to +1 (clearly positive):
   * with ANTHROPIC_API_KEY: Claude reads the headlines and scores them (one batched call), flags results/board-meeting
@@ -74,6 +76,7 @@ class NewsBrain:
         self.by_stock: dict[str, dict] = {}       # symbol → {score, event, headlines, why, at, source}
         self.market: dict = {"score": 0.0, "headlines": [], "why": "", "at": 0}
         self.last_run = 0.0
+        self.premarket: dict = {}                 # morning brief, built once a day before the open
 
     def get(self, sym: str) -> dict | None:
         d = self.by_stock.get(sym)
@@ -127,6 +130,67 @@ class NewsBrain:
         self.e.event("news", f"news & sentiment for {len(got)} stocks + market ({'Claude' if scored else 'word list'}): "
                      + ", ".join(f"{k} {v['score']:+.1f}" for k, v in list(self.by_stock.items())[:10] if k in got))
 
+    MORNING = ("GIFT Nifty today", "Sensex Nifty outlook today", "US stock market Dow Nasdaq overnight", "Asian markets today Nikkei",
+               "crude oil price today", "rupee dollar today", "FII DII data", "RBI policy", "Nifty midcap smallcap index")
+
+    async def morning(self) -> None:
+        """Before the open: global cues + news for EVERY stock in the universe, scored, plus a short brief."""
+        syms = list(self.e.s.stocks)
+        async with httpx.AsyncClient(timeout=12, headers=UA, follow_redirects=True) as c:
+            cues: dict[str, list[dict]] = {}
+            for q in self.MORNING:
+                cues[q] = (await self._fetch(c, q))[:4]
+                await asyncio.sleep(0.4)
+            got: dict[str, list[dict]] = {}
+            for sym in syms:
+                ins = self.e.im.equity.get(sym)
+                name = (getattr(ins, "name", "") or sym).replace("-EQ", "")
+                got[sym] = await self._fetch(c, f"{name} share NSE")
+                await asyncio.sleep(0.5)
+        market = [h for v in cues.values() for h in v]
+        scored: dict = {}
+        if self.e.claude.enabled:
+            items = list(got.items())
+            for i in range(0, len(items), 25):          # batches keep each Claude call small
+                part = await self._claude_score(market[:12], dict(items[i:i + 25]))
+                if part:
+                    scored.update(part)
+        now = time.time()
+        for sym, hs in got.items():
+            sc, ev = lexicon_score([h["title"] for h in hs])
+            why, src = "", "words"
+            if sym in scored and isinstance(scored[sym], dict):
+                sc, ev, why, src = scored[sym].get("score", sc), bool(scored[sym].get("event", ev)), scored[sym].get("why", ""), "claude"
+            self.by_stock[sym] = {"score": round(float(sc), 2), "event": ev, "headlines": hs[:4], "why": str(why)[:160], "at": now, "source": src}
+        ms, _ = lexicon_score([h["title"] for h in market])
+        mk = scored.get("_market") if isinstance(scored.get("_market"), dict) else {}
+        self.market = {"score": mk.get("score", ms), "headlines": market[:6], "why": mk.get("why", ""), "at": now}
+        ranked = sorted(((v["score"], k) for k, v in self.by_stock.items() if k in got), reverse=True)
+        brief = await self._brief(cues, ranked) if self.e.claude.enabled else ""
+        self.premarket = {"day": now_ist().date().isoformat(), "at": now, "market_score": self.market["score"], "brief": brief,
+                          "cues": {k: [h["title"] for h in v[:2]] for k, v in cues.items()},
+                          "positive": [k for s_, k in ranked if s_ >= 0.4][:8], "negative": [k for s_, k in ranked[::-1] if s_ <= -0.4][:8],
+                          "events": [k for k, v in self.by_stock.items() if v.get("event") and k in got], "stocks": len(got)}
+        self.e.event("premarket", f"morning news: {len(got)} stocks + global cues · market {self.market['score']:+.1f} · "
+                     f"positive {', '.join(self.premarket['positive']) or '—'} · negative {', '.join(self.premarket['negative']) or '—'} · "
+                     f"event days (skipped) {', '.join(self.premarket['events']) or '—'}")
+
+    async def _brief(self, cues: dict, ranked: list) -> str:
+        cl = self.e.claude
+        if not cl._budget_ok():
+            return ""
+        data = {"global_and_india_cues": {k: [h["title"] for h in v] for k, v in cues.items()},
+                "stock_scores": {k: s_ for s_, k in ranked}, "events": [k for k, v in self.by_stock.items() if v.get("event")]}
+        try:
+            return (await cl._ask("You write a pre-market brief for an Indian intraday paper-trading bot trading mid and small caps. "
+                                  "In at most 5 short bullet lines: overall mood from global and Indian cues, what kind of day it may "
+                                  "be (trend / range / volatile), which listed stocks have notable news either way, and which to avoid "
+                                  "(event days). Facts from the headlines only; no price targets, no promises.",
+                                  json.dumps(data, default=str), max_tokens=350, timeout=40))[:1200]
+        except Exception as ex:  # noqa: BLE001
+            log.warning("brief: %s", ex)
+            return ""
+
     async def _claude_score(self, market: list[dict], got: dict[str, list[dict]]) -> dict | None:
         cl = self.e.claude
         if not cl._budget_ok():
@@ -138,7 +202,7 @@ class NewsBrain:
                "Ignore generic market-wrap noise. JSON only: "
                '{"_market":{"score":0,"why":""},"SYMBOL":{"score":0,"event":false,"why":""}}')
         try:
-            txt = await cl._ask(sys, json.dumps(data), max_tokens=900)
+            txt = await cl._ask(sys, json.dumps(data), max_tokens=1600, timeout=40)
             j = json.loads(txt[txt.find("{"): txt.rfind("}") + 1])
             return j if isinstance(j, dict) else None
         except Exception as ex:  # noqa: BLE001
@@ -149,14 +213,18 @@ class NewsBrain:
         while True:
             try:
                 n = now_ist()
-                inday = n.weekday() < 5 and (8, 45) <= (n.hour, n.minute) <= (15, 15)
-                if inday and time.time() - self.last_run >= self.e.s.news_every_min * 60:
+                wd = n.weekday() < 5
+                hm = (n.hour, n.minute)
+                if wd and (8, 35) <= hm <= (9, 10) and self.premarket.get("day") != n.date().isoformat() and self.e.s.stocks:
+                    await self.morning()                  # before the open: everything, once
                     self.last_run = time.time()
-                    await self.refresh()
+                elif wd and (9, 30) <= hm <= (15, 15) and time.time() - self.last_run >= self.e.s.news_every_min * 60:
+                    self.last_run = time.time()
+                    await self.refresh()                  # during the day: the shortlist, every 15 minutes
             except Exception as ex:  # noqa: BLE001
                 log.warning("news loop: %s", ex)
             await asyncio.sleep(30)
 
     def snapshot(self) -> dict:
-        return {"market": self.market, "stocks": {k: v for k, v in self.by_stock.items() if time.time() - v["at"] < 6 * 3600},
+        return {"premarket": self.premarket, "market": self.market, "stocks": {k: v for k, v in self.by_stock.items() if time.time() - v["at"] < 6 * 3600},
                 "every_min": self.e.s.news_every_min, "block_score": self.e.s.news_block_score, "_open": market_open()}

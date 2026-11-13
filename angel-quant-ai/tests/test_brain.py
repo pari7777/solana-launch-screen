@@ -44,3 +44,20 @@ def test_learning_decisions():
     for _ in range(5):
         back = tick_pauses(st2)
     assert "vwap" not in st2["paused"] and back
+
+
+def test_morning_brief_without_claude(monkeypatch):
+    import asyncio, time
+    from app.ai import news as N
+    async def fake_fetch(self, c, q):
+        return [{"title": "Federal Bank wins order, shares jump" if "FEDERAL" in q.upper() else "Sensex flat", "source": "x", "at": ""}]
+    monkeypatch.setattr(N.NewsBrain, "_fetch", fake_fetch)
+    async def nosleep(*a, **k): return None
+    monkeypatch.setattr(N.asyncio, "sleep", nosleep)
+    ev = []
+    e = SimpleNamespace(s=SimpleNamespace(stocks=["FEDERALBNK", "HFCL"], news_block_score=0.5, news_every_min=15),
+                        im=SimpleNamespace(equity={"FEDERALBNK": SimpleNamespace(name="FEDERAL BANK"), "HFCL": SimpleNamespace(name="HFCL")}),
+                        claude=SimpleNamespace(enabled=False), event=lambda k, m: ev.append(m))
+    b = N.NewsBrain(e)
+    asyncio.run(b.morning())
+    assert b.premarket["stocks"] == 2 and "FEDERALBNK" in b.premarket["positive"] and ev
