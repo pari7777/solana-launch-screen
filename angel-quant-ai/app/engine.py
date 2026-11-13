@@ -336,8 +336,9 @@ class Engine:
                 minute = n.replace(second=0, microsecond=0)
                 if market_open(n) and n.second >= 2 and minute != self.last_bar_minute:
                     self.last_bar_minute = minute
-                    await self._refresh_chains()
-                    await self._refresh_greeks()
+                    if self.s.enable_options_scalping or self.s.enable_options_directional:
+                        await self._refresh_chains()          # option chains only when options are switched on
+                        await self._refresh_greeks()
                     self._update_regime()
                     if self.running:
                         await self._run_strategies()
@@ -374,7 +375,9 @@ class Engine:
     async def _run_strategies(self):
         t0 = time.perf_counter()
         positions = list(self.oms.positions.values())
-        budget = budgets(self.stats, self.equity())
+        off = {f for f, on in (("options_scalp", self.s.enable_options_scalping), ("options_directional", self.s.enable_options_directional),
+                                ("swing", self.s.enable_swing)) if not on}
+        budget = budgets(self.stats, self.equity(), off)
         for strat in self.strategies:
             if not strat.enabled or strat.name in self.risk.st.disabled_strategies:
                 continue

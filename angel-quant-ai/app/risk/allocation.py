@@ -83,8 +83,13 @@ class Stats:
                 for k, v in sorted(self.by.items())]
 
 
-def budgets(stats: Stats, capital: float) -> dict[str, float]:
-    """Rupee budget per strategy family. Families with ≥20 trades and negative expectancy get half weight."""
+def budgets(stats: Stats, capital: float, off: set[str] | None = None) -> dict[str, float]:
+    """Rupee budget per strategy family. Families with ≥20 trades and negative expectancy get half weight.
+    Families switched off (`off`) get nothing; their share goes to the families still on (cash reserve stays)."""
+    off = off or set()
+    on = {f: w for f, w in BASE_WEIGHTS.items() if f != "cash_reserve" and f not in off}
+    spare = sum(w for f, w in BASE_WEIGHTS.items() if f in off)
+    tot = sum(on.values()) or 1.0
     fam_stats: dict[str, StratStats] = {}
     for strat, st in stats.by.items():
         f = FAMILY.get(strat, strat)
@@ -94,6 +99,10 @@ def budgets(stats: Stats, capital: float) -> dict[str, float]:
     for fam, w in BASE_WEIGHTS.items():
         if fam == "cash_reserve":
             continue
+        if fam in off:
+            out[fam] = 0.0
+            continue
+        w = w + spare * w / tot
         fs = fam_stats.get(fam)
         if fs and fs.n >= 20 and fs.net < 0:
             w *= 0.5

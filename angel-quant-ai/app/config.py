@@ -58,8 +58,8 @@ class Settings(BaseSettings):
 
     # ── strategy switches ──
     enable_stock_intraday: bool = True
-    enable_options_scalping: bool = True
-    enable_options_directional: bool = True
+    enable_options_scalping: bool = False       # owner 13 Nov 2026: stocks only — no options or futures
+    enable_options_directional: bool = False
     enable_swing: bool = False                  # needs daily candles + owner review; off by default
 
     # ── risk (₹) ──
