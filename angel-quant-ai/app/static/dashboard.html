@@ -43,6 +43,7 @@ a{color:var(--b)}
 <div class="card kpi"><div class="s">Feed / latency</div><div class="v" id="feed">—</div><div class="s" id="lat"></div></div>
 </div>
 <div class="card" id="testcard"><h2>30-day paper test — stocks only (mid &amp; small caps)</h2><div id="tc">loading…</div></div>
+<div class="card"><h2>AI brain — news, sentiment &amp; daily learning</h2><div id="brain">waiting for first news check…</div></div>
 <div class="two">
 <div class="card"><h2>Risk</h2><div id="risk"></div></div>
 <div class="card"><h2>Claude</h2><div id="claude"></div></div>
@@ -63,7 +64,15 @@ const inr=v=>v==null?'—':(v<0?'−':'')+'₹'+Math.abs(v).toLocaleString('en-I
 const cls=v=>v>0?'pos':v<0?'neg':'';
 async function ctl(a){const r=await fetch('/api/control/'+a,{method:'POST'});const j=await r.json();alert(j.msg)}
 async function ex(id){if(!confirm('Exit position #'+id+'?'))return;const r=await fetch('/api/exit/'+id,{method:'POST'});alert((await r.json()).msg)}
-function render(S){
+function render(S){try{const B=S.brain||{};const N=B.news||{};const L=B.learn||{};const sc=v=>v==null?'—':(v>0?'+':'')+Number(v).toFixed(1);
+const col=v=>v>=0.5?'#15803d':v<=-0.5?'#b91c1c':'#475569';
+const rows=Object.entries(N.stocks||{}).map(([k,v])=>`<tr><td>${k}</td><td style="color:${col(v.score)}"><b>${sc(v.score)}</b>${v.event?' · event':''}</td><td>${(v.why||(v.headlines&&v.headlines[0]&&v.headlines[0].title)||'').replace(/</g,'&lt;')}</td></tr>`).join('');
+const w=Object.entries(L.weights||{}).map(([k,v])=>`${k} ${Number(v).toFixed(1)}×`).join(' · ')||'all 1.0× (learning starts after enough trades)';
+const pz=Object.keys(L.paused||{}).length?' · paused: '+Object.entries(L.paused).map(([k,v])=>`${k} (${v} days)`).join(', '):'';
+const lg=(L.log||[]).slice(0,3).map(x=>`<div class="s"><b>${x.day}</b>: ${x.changes.join('; ')}${x.note?'<br>'+x.note.replace(/</g,'&lt;').replace(/\n/g,'<br>'):''}</div>`).join('');
+$('brain').innerHTML=`<div class="s">Market news: <b style="color:${col((N.market||{}).score)}">${sc((N.market||{}).score)}</b> ${((N.market||{}).why||'')}</div>
+<div class="tw"><table><thead><tr><th>Stock</th><th>Sentiment</th><th>Why / headline</th></tr></thead><tbody>${rows||'<tr><td colspan=3>No news check yet (runs every '+(N.every_min||30)+' min, 8:45–15:15)</td></tr>'}</tbody></table></div>
+<div class="s">Strategy size weights: ${w}${pz}</div>${lg}`}catch(err){}
  $('sub').textContent=`${S.mode.toUpperCase()} · ${S.status} · ${S.market_open?'market open':'market closed'} · ${S.time} IST · db ${S.db}`;
  $('blk').innerHTML=S.mode==='paper'?`<div class="banner"><b>Paper trading</b> — real market data, simulated orders. Live orders stay blocked until: ${S.live_blockers.map(esc).join(' · ')}</div>`:'';
  $('eq').textContent=inr(S.equity);$('cap').textContent=`start ${inr(S.capital)} · all-time net ${inr(S.realized_total)}`;

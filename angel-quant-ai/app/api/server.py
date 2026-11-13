@@ -163,4 +163,7 @@ def snapshot(e: Engine) -> dict:
                     "order_ack_ms": [round(o.ack_ms, 0) for o in list(e.oms.orders.values())[-10:] if o.ack_ms]},
         "instruments": {"source": e.im.source, "count": len(e.im.by_token)},
         "db": e.store.kind, "events": e.events[:60],
+        "brain": {"news": e.news.snapshot() if e.s.news_enabled else None,
+                  "learn": {"weights": e.learner.state.get("weights", {}), "paused": e.learner.state.get("paused", {}),
+                            "log": e.learner.state.get("log", [])[:5]} if e.s.learn_enabled else None},
     }

@@ -50,6 +50,14 @@ class Settings(BaseSettings):
                            "BAJFINANCE,MARUTI,TATAMOTORS,SUNPHARMA,M&M,TITAN,ULTRACEMCO,NTPC")
     # official NSE index lists downloaded each day (mid & small caps by default); empty = use STOCK_UNIVERSE only
     stock_universe_indexes: str = "NIFTY MIDCAP SELECT,NIFTY SMALLCAP 50"
+    # ── AI brain: news & sentiment + daily learning loop ──
+    news_enabled: bool = True
+    news_every_min: int = 30
+    news_block_score: float = 0.5               # skip a long when the stock's news score ≤ −0.5 (short when ≥ +0.5)
+    learn_enabled: bool = True
+    learn_lookback_days: int = 20               # trading days of closed trades the loop looks at
+    learn_min_trades: int = 15                  # less evidence than this → no change
+    learn_pause_days: int = 5
     paper_test_start: str = "2026-11-16"         # owner 13 Nov 2026: 30-day paper test of the stocks-only mid/small-cap plan
     paper_test_days: int = 30
     shortlist_size: int = 10                    # trade only the day's N most active stocks (turnover × move), refreshed every 15 min

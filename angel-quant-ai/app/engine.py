@@ -64,6 +64,10 @@ class Engine:
             self.strategies.append(OptionMomentum(self))
         if s.enable_options_directional:
             self.strategies += [DebitSpread(self), IronCondor(self)]
+        from app.ai.learn import Learner
+        from app.ai.news import NewsBrain
+        self.news = NewsBrain(self)                       # news & sentiment (Claude when a key is set, else a word list)
+        self.learner = Learner(self)                      # daily learning loop: size weights + pauses per strategy
         self.running = True
         self.status = "starting"
         self.events: list[dict] = []
@@ -252,6 +256,10 @@ class Engine:
         asyncio.create_task(self.stream.run())
         asyncio.create_task(self._loop())
         asyncio.create_task(self._manage_loop())
+        if self.s.news_enabled:
+            asyncio.create_task(self.news.run())
+        if self.s.learn_enabled:
+            asyncio.create_task(self.learner.loop())
         if isinstance(self.broker, LiveBroker):
             asyncio.create_task(self.broker.run_sync())
             asyncio.create_task(self._reconcile_loop())
@@ -413,6 +421,14 @@ class Engine:
             for plan in plans:
                 plan.regime = self.regime.label
                 plan.meta["signal_ms"] = (time.perf_counter() - t0) * 1000
+                if self.s.learn_enabled and self.learner.paused(plan.strategy):
+                    self.risk.reject(f"learning: {plan.strategy} paused")
+                    self.store.signal(plan.strategy, plan.ins.symbol, "REJECTED", "learning loop paused this strategy", plan.summary())
+                    continue
+                w = self.learner.weight(plan.strategy) if self.s.learn_enabled else 1.0
+                if w != 1.0 and plan.product == "INTRADAY" and plan.ins.lot <= 1 and plan.qty:
+                    plan.qty = max(1, int(plan.qty * w))
+                    plan.meta["learn_weight"] = w
                 t = self.md.ticks.get(self.key_for(plan.ins))
                 spread = (t.ask - t.bid) if t and t.bid and t.ask else None
                 evaluate(plan, self.charges, spread, self.s.min_net_reward_rupees, self.s.min_reward_risk)
@@ -423,6 +439,9 @@ class Engine:
                 why = None
                 if not allowed(self.regime, plan.strategy, side):
                     why = f"regime {self.regime.label} does not allow {plan.strategy} {side.lower()}"
+                news = self.news.get(plan.underlying) if self.s.news_enabled else None
+                if not why and self.s.news_enabled and plan.ins.lot <= 1:
+                    why = self.news.gate(plan.underlying, side)
                 if not why:
                     fam = FAMILY.get(plan.strategy, plan.strategy)
                     used = sum(p.capital for p in positions if p.is_open and FAMILY.get(p.strategy) == fam)
@@ -435,7 +454,13 @@ class Engine:
                     self.risk.reject(why)
                     self.store.signal(plan.strategy, plan.ins.symbol, "REJECTED", why, plan.summary())
                     continue
-                review = await self.claude.review(plan.summary(), self._context())
+                summ = plan.summary()
+                if news:
+                    summ["news"] = {"score": news["score"], "why": news.get("why"), "headlines": [h["title"] for h in news["headlines"][:4]]}
+                ctx = self._context()
+                if self.s.news_enabled and self.news.market.get("headlines"):
+                    ctx["market_news"] = {"score": self.news.market.get("score"), "headlines": [h["title"] for h in self.news.market["headlines"][:4]]}
+                review = await self.claude.review(summ, ctx)
                 if review["verdict"] == "VETO":
                     self.store.signal(plan.strategy, plan.ins.symbol, "VETOED", review["reason"], plan.summary())
                     self.event("claude", f"Claude vetoed {plan.strategy} {plan.ins.symbol}: {review['reason']}")
