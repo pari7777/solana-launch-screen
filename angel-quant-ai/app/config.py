@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     stock_universe_indexes: str = "NIFTY MIDCAP SELECT,NIFTY SMALLCAP 50"
     # ── AI brain: news & sentiment + daily learning loop ──
     news_enabled: bool = True
-    news_every_min: int = 30
+    news_every_min: int = 15
     news_block_score: float = 0.5               # skip a long when the stock's news score ≤ −0.5 (short when ≥ +0.5)
     learn_enabled: bool = True
     learn_lookback_days: int = 20               # trading days of closed trades the loop looks at

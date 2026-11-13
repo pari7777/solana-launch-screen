@@ -1,6 +1,6 @@
 """News & sentiment for the AI brain.
 
-Every 30 minutes during the trading day (08:45–15:15 IST) it collects recent headlines for the market and for each stock on
+Every 15 minutes during the trading day (08:45–15:15 IST) it collects recent headlines for the market and for each stock on
 the day's shortlist from Google News RSS (India edition, last 24 h), and scores each stock from −1 (clearly negative)
 to +1 (clearly positive):
   * with ANTHROPIC_API_KEY: Claude reads the headlines and scores them (one batched call), flags results/board-meeting
