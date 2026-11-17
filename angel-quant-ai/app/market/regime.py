@@ -108,10 +108,10 @@ def detect(nifty_1m: tuple, prev_close: float | None, day_open: float | None, vi
 
 # Which strategy families may trade in which regime (central selection; strategies never self-authorise)
 ALLOWED = {
-    "BULL_TREND": {"stock_orb", "stock_vwap_trend", "opt_momentum", "opt_debit_spread", "swing"},
-    "BEAR_TREND": {"stock_orb", "stock_vwap_trend", "opt_momentum", "opt_debit_spread"},
+    "BULL_TREND": {"stock_orb", "stock_vwap_trend", "stock_momentum_burst", "opt_momentum", "opt_debit_spread", "swing"},
+    "BEAR_TREND": {"stock_orb", "stock_vwap_trend", "stock_momentum_burst", "opt_momentum", "opt_debit_spread"},
     "SIDEWAYS": {"stock_vwap_reversion", "opt_iron_condor"},
-    "VOL_EXPANSION": {"opt_momentum", "stock_orb"},
+    "VOL_EXPANSION": {"opt_momentum", "stock_orb", "stock_momentum_burst"},
     "REVERSAL_UP": {"stock_vwap_trend", "opt_debit_spread"},
     "REVERSAL_DOWN": {"stock_vwap_trend", "opt_debit_spread"},
     "UNKNOWN": set(),
