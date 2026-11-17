@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     brain_min_auc: float = 0.55                 # adopt a model only if it beats chance on unseen recent days
     brain_min_prob: float = 0.30                # skip signals whose win chance is below this (once a model is adopted)
     brain_pretrain_days: int = 365              # past days replayed once (Angel One history; Yahoo gives ~29 days)
+    fast_scan_seconds: float = 5.0              # fast strategies (momentum burst) re-check the live price this often
     # ── research rules (owner 17 Nov 2026) ──
     rule_skip_open_min: int = 10                # no new entries in the first N minutes after 09:15 (noisy auction prices)
     rule_momentum: bool = True                  # no longs in the weakest, no shorts in the strongest 20-day performers

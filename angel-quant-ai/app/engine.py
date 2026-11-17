@@ -26,7 +26,7 @@ from app.storage.cache import Cache
 from app.storage.db import Store
 from app.strategies.base import evaluate
 from app.strategies.options import DebitSpread, IronCondor, OptionMomentum
-from app.strategies.stock_intraday import OpeningRangeBreakout, VwapReversion, VwapTrendPullback
+from app.strategies.stock_intraday import MomentumBurst, OpeningRangeBreakout, VwapReversion, VwapTrendPullback
 
 log = logging.getLogger("engine")
 DIRECTION = {"BUY": "LONG", "SELL": "SHORT"}
@@ -59,7 +59,7 @@ class Engine:
         self.oms = OMS(s, self.broker, self.md, self.im, self.key_for, on_closed=self._on_closed, on_event=self._on_event)
         self.strategies = []
         if s.enable_stock_intraday:
-            self.strategies += [OpeningRangeBreakout(self), VwapTrendPullback(self), VwapReversion(self)]
+            self.strategies += [OpeningRangeBreakout(self), VwapTrendPullback(self), VwapReversion(self), MomentumBurst(self)]
         if s.enable_options_scalping:
             self.strategies.append(OptionMomentum(self))
         if s.enable_options_directional:
@@ -291,6 +291,7 @@ class Engine:
             await self.brain.load()
             asyncio.create_task(self._brain_start())
         asyncio.create_task(self._momentum_loop())
+        asyncio.create_task(self._fast_loop())
         if isinstance(self.broker, LiveBroker):
             asyncio.create_task(self.broker.run_sync())
             asyncio.create_task(self._reconcile_loop())
@@ -497,7 +498,25 @@ class Engine:
                 "open_positions": len([p for p in self.oms.positions.values() if p.is_open]),
                 "today_net": round(self.risk.st.realized_today, 2)}
 
-    async def _run_strategies(self):
+    async def _fast_loop(self):
+        """Every few seconds: only the fast strategies, on the live price — momentum bursts can't wait for the next minute."""
+        while True:
+            await asyncio.sleep(self.s.fast_scan_seconds)
+            try:
+                if self.running and market_open() and any(getattr(x, "fast", False) for x in self.strategies):
+                    await self._run_strategies(fast_only=True)
+            except Exception as e:  # noqa: BLE001
+                log.warning("fast loop: %s", e)
+
+    async def _run_strategies(self, fast_only: bool = False):
+        if not hasattr(self, "_strat_lock"):
+            self._strat_lock = asyncio.Lock()
+        if fast_only and self._strat_lock.locked():
+            return                                        # the per-minute run is busy — skip this fast tick
+        async with self._strat_lock:
+            await self._run_strategies_locked(fast_only)
+
+    async def _run_strategies_locked(self, fast_only: bool):
         t0 = time.perf_counter()
         positions = list(self.oms.positions.values())
         off = {f for f, on in (("options_scalp", self.s.enable_options_scalping), ("options_directional", self.s.enable_options_directional),
@@ -507,6 +526,8 @@ class Engine:
             self.brain.update()                           # resolve shadow outcomes of earlier signals
         for strat in self.strategies:
             if not strat.enabled or strat.name in self.risk.st.disabled_strategies:
+                continue
+            if fast_only and not getattr(strat, "fast", False):
                 continue
             try:
                 plans = strat.on_bar()
