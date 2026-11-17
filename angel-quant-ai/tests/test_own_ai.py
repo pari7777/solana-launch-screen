@@ -81,3 +81,56 @@ def test_shadow_outcome_stop_first_is_a_loss(tmp_path):
     b.open.append(sh)
     b.update()
     assert sh.done and e.store.mem_ml[-1]["label"] == 0
+
+
+def test_pretrain_replay_makes_lessons_without_lookahead():
+    from datetime import datetime, timedelta
+    from app.ai.pretrain import _regime_timeline, _replay_stock
+    from app.clock import IST
+    from app.costs.charges import ChargeModel
+    s = Settings(_env_file=None)
+    ins = N(token="1", symbol="TEST-EQ", name="TEST", exchange="NSE", itype="", expiry=None, strike=0, lot=1, tick=0.05, is_option=False)
+    im = N(equity={"TEST": ins})
+    rng = np.random.default_rng(3)
+    cs, nif, p, q = [], [], 1000.0, 24000.0
+    d0 = datetime(2026, 9, 1, 9, 15, tzinfo=IST)
+    for day in range(5):
+        for m in range(375):
+            ts = int((d0 + timedelta(days=day, minutes=m)).timestamp())
+            o = p; p *= 1 + rng.normal(0, 0.0015)
+            cs.append(Candle(ts, o, max(o, p) * 1.0005, min(o, p) * 0.9995, p, float(rng.integers(1000, 9000))))
+            o2 = q; q *= 1 + rng.normal(0, 0.0005)
+            nif.append(Candle(ts, o2, max(o2, q), min(o2, q), q, 0))
+    L = _replay_stock(s, im, "TEST", cs, _regime_timeline(nif, {}), {}, ChargeModel())
+    assert L and all(set(FEATURES) <= set(x["feats"]) for x in L)
+    assert all(x["outcome"] in ("stop", "target", "square-off") for x in L)
+    assert all(abs(x["feats"]["stop_pct"] - 2.0) < 0.1 for x in L)        # live 2 % stop rule
+
+
+def _flow():
+    from app.market.flow import FlowBrain
+    return FlowBrain(N(s=Settings(_env_file=None)))
+
+
+def test_guard_hype_pump_and_vertical_run():
+    from app.market.flow import Flow
+    fb = _flow()
+    f = fb.by.setdefault("X", Flow()); f.big_sell, f.big_buy = 6, 1
+    assert "hype pump" in fb.gate("X", "LONG", session_move_pct=7, vol_ratio=4, news_score=0.8)
+    now = time.time()
+    g = fb.by.setdefault("Y", Flow())
+    g.px = [(now - 900 + i * 60, 100 + i * 0.4) for i in range(16)]          # +6 % in 15 min
+    assert "not chasing" in fb.gate("Y", "LONG", news_score=0.0)
+    h = fb.by.setdefault("Z", Flow())
+    h.px = [(now - 1700 + i * 60, p) for i, p in enumerate([100, 101, 102, 103, 104, 105, 104, 103, 102.5, 102, 102, 102])]
+    assert "dump under way" in fb.gate("Z", "LONG", news_score=0.0)
+
+
+def test_guard_spoofing_detects_vanishing_buy_wall():
+    from app.market.flow import Flow, FlowBrain
+    f = Flow(); now = time.time()
+    f.book = [(now - 100 + i * 2, 10_000.0, 10_000.0, 50_000.0) for i in range(35)]   # normal book
+    f.book += [(now - 20, 40_000.0, 10_000.0, 50_000.0), (now - 15, 40_000.0, 10_000.0, 50_100.0),
+               (now - 10, 30_000.0, 10_000.0, 50_200.0), (now - 1, 10_500.0, 10_000.0, 50_300.0)]   # wall appears, vanishes
+    FlowBrain._spoof_check(f, now)
+    assert f.spoof_buy_at and f.spoofs == 1
