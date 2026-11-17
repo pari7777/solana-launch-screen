@@ -117,17 +117,30 @@ class Store:
                   "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
                   _ts(t), strategy, symbol, side, traded, int(label), float(net), outcome, json.dumps(feats, default=str))
 
+    async def ml_bulk(self, rows: list[dict]) -> None:
+        """Many lessons at once (pre-training) — written directly, not through the queue."""
+        if not self.pool:
+            self.mem_ml.extend(rows)
+            del self.mem_ml[:-200000]
+            return
+        recs = [(_ts(r["t"]), r["strategy"], r["symbol"], r["side"], False, int(r["label"]), float(r["net"]), r.get("outcome", ""),
+                 json.dumps(r["feats"], default=str)) for r in rows]
+        async with self.pool.acquire() as c:
+            for i in range(0, len(recs), 2000):
+                await c.executemany("INSERT INTO ml_samples (signal_at, strategy, symbol, side, traded, label, net, outcome, feats) "
+                                    "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", recs[i:i + 2000])
+
     async def ml_samples(self, days: int = 60) -> list[dict]:
         if not self.pool:
             return list(self.mem_ml)
         async with self.pool.acquire() as c:
             rows = await c.fetch("SELECT signal_at, strategy, symbol, label, net, feats FROM ml_samples "
                                  "WHERE signal_at > now() - make_interval(days => $1) ORDER BY signal_at", days)
+        from app.ai.scorer import vector              # keep only the number vector: a year of lessons stays small in RAM
         out = []
         for r in rows:
             f = r["feats"]
-            out.append({"t": r["signal_at"].timestamp(), "strategy": r["strategy"], "symbol": r["symbol"], "label": r["label"],
-                        "net": r["net"], "feats": json.loads(f) if isinstance(f, str) else f})
+            out.append({"t": r["signal_at"].timestamp(), "label": r["label"], "x": vector(json.loads(f) if isinstance(f, str) else f)})
         return out
 
     async def kv_get(self, k: str, default=None):
