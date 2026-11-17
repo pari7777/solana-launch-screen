@@ -29,6 +29,9 @@ HOSTS = ("https://www.niftyindices.com/IndexConstituent/", "https://nsearchives.
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36", "Accept": "text/csv,*/*"}
 
 
+COMPANY: dict[str, str] = {}      # NSE symbol → company name from the index file (used by the news relevance filter)
+
+
 def parse(text: str) -> list[str]:
     out = []
     for row in csv.DictReader(io.StringIO(text)):
@@ -36,6 +39,9 @@ def parse(text: str) -> list[str]:
         series = (row.get("Series") or "EQ").strip().upper()
         if sym and series == "EQ":
             out.append(sym)
+            name = (row.get("Company Name") or row.get("COMPANY NAME") or "").strip()
+            if name:
+                COMPANY[sym] = name
     return out
 
 
