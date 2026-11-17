@@ -166,5 +166,6 @@ def snapshot(e: Engine) -> dict:
         "brain": {"news": e.news.snapshot() if e.s.news_enabled else None,
                   "flow": e.flow.snapshot() if e.s.flow_enabled else None,
                   "learn": {"weights": e.learner.state.get("weights", {}), "paused": e.learner.state.get("paused", {}),
-                            "log": e.learner.state.get("log", [])[:5]} if e.s.learn_enabled else None},
+                            "log": e.learner.state.get("log", [])[:5]} if e.s.learn_enabled else None,
+                  "scorer": e.brain.snapshot() if e.s.brain_enabled else None},
     }
