@@ -134,3 +134,27 @@ def test_guard_spoofing_detects_vanishing_buy_wall():
                (now - 10, 30_000.0, 10_000.0, 50_200.0), (now - 1, 10_500.0, 10_000.0, 50_300.0)]   # wall appears, vanishes
     FlowBrain._spoof_check(f, now)
     assert f.spoof_buy_at and f.spoofs == 1
+
+
+def test_momentum_burst_fires_both_ways():
+    from datetime import datetime, timedelta
+    from app.backtest.engine import SimCtx
+    from app.clock import IST
+    from app.strategies.stock_intraday import MomentumBurst
+    for side, sign in (("BUY", 1), ("SELL", -1)):
+        s = Settings(_env_file=None, stock_universe="TEST")
+        ins = N(token="1", symbol="TEST-EQ", name="TEST", exchange="NSE", itype="", expiry=None, strike=0, lot=1, tick=0.05, is_option=False)
+        ctx = SimCtx(s, N(equity={"TEST": ins}), 1_000_000)
+        st = MomentumBurst(ctx)
+        ser = ctx.md.series.setdefault(ctx.key_for(ins), Series(live=False))
+        d0 = datetime(2026, 9, 1, 9, 15, tzinfo=IST)
+        p = 1000.0
+        for m in range(40):
+            ts = int((d0 + timedelta(minutes=m)).timestamp())
+            step = 0.0005 if m < 37 else 0.004                              # quiet drift, then a 3-minute burst
+            o = p; p *= 1 + sign * step
+            vol = 1000 if m < 37 else 6000
+            ser.candles.append(Candle(ts, o, max(o, p), min(o, p), p, vol))
+        ctx._now = d0 + timedelta(minutes=40)
+        plans = st.on_bar()
+        assert plans and plans[0].side == side and plans[0].meta["exit"]["time_stop_min"] == 12
