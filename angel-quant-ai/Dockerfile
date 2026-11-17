@@ -3,6 +3,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 TZ=Asia/Kolk
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+# own AI: CPU-only PyTorch (small, no GPU needed) + FinBERT, downloaded once at build time so start-up needs no internet
+ENV HF_HOME=/app/hf
+COPY requirements-ai.txt .
+RUN pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cpu && pip install -r requirements-ai.txt \
+ && python -c "from transformers import pipeline; pipeline('text-classification', model='ProsusAI/finbert')"
 COPY app ./app
 COPY config ./config
 COPY migrations ./migrations
