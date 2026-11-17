@@ -186,3 +186,63 @@ class VwapReversion(StockStrategy):
                 out.append(self.plan(ins, name, "SELL", last, stop, vw[-1], f"{dev[-2] / sd:.1f}σ above VWAP, RSI {r[-2]:.0f}, reversal bar", self.name))
                 self.last_signal[name] = int(ts[-1])
         return out
+
+
+class MomentumBurst(StockStrategy):
+    """Fast momentum, both directions. Checked every few seconds on the LIVE price (closed bars in replays):
+    the price breaks the 20-minute high (low) by ≥ 0.15 % while the last 3 minutes trade ≥ 2.5× normal volume,
+    on the right side of VWAP, with the day's move and the stock's 20-day momentum rank agreeing, and the NIFTY not in
+    a trend against the trade. Exits are quick: trailing starts at +0.3 R, half is booked at +0.6 R, and a trade that has
+    not moved our way within 12 minutes is closed (time stop) — momentum either works fast or it is wrong."""
+    name = "stock_momentum_burst"
+    fast = True
+    COOLDOWN_S = 20 * 60
+    EXIT = {"trail_start_r": 0.3, "trail_gap_r": 0.35, "partial_book_r": 0.6, "time_stop_min": 12, "time_stop_min_r": 0.15}
+
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self.last_signal: dict[str, float] = {}
+
+    def on_bar(self):
+        out = []
+        m = self.ctx.minutes_since_open()
+        if m < 20 or m > 330:
+            return out
+        reg = getattr(self.ctx, "regime", None)
+        label = getattr(reg, "label", "") if reg else ""
+        mom = getattr(self.ctx, "momentum", None)
+        for name, ins, k in self.stocks():
+            s = self.ctx.md.series.get(k)
+            if not s:
+                continue
+            ts, o, h, l, c, v = s.session()
+            if len(c) < 25:
+                continue
+            t_now = float(ts[-1]) + 60
+            if t_now - self.last_signal.get(name, -1e12) < self.COOLDOWN_S:
+                continue
+            t = self.ctx.md.ticks.get(k) if hasattr(self.ctx.md, "ticks") else None
+            last = float(t.ltp) if t and getattr(t, "ltp", 0) else float(c[-1])
+            hi20, lo20 = float(h[-21:-1].max()), float(l[-21:-1].min())
+            base = v[-23:-3].mean()
+            if base <= 0:
+                continue
+            surge = float(v[-3:].mean() / base)
+            if surge < 2.5:
+                continue
+            vw = ind.vwap(h, l, c, v)[-1]
+            day = (last / o[0] - 1) * 100 if o[0] > 0 else 0.0
+            rank = mom.get(name) if mom is not None and hasattr(mom, "get") else None
+            if last >= hi20 * 1.0015 and last > vw and day > 0.3 and label != "BEAR_TREND" and (rank is None or rank >= 0.5):
+                p = self.plan(ins, name, "BUY", last, last * 0.99, last * 1.02,
+                              f"momentum burst up: broke 20-min high {hi20:.2f} on {surge:.1f}× volume, +{day:.1f}% today", self.name)
+                p.meta["exit"] = dict(self.EXIT)
+                out.append(p)
+                self.last_signal[name] = t_now
+            elif last <= lo20 * 0.9985 and last < vw and day < -0.3 and label != "BULL_TREND" and (rank is None or rank <= 0.5):
+                p = self.plan(ins, name, "SELL", last, last * 1.01, last * 0.98,
+                              f"momentum burst down: broke 20-min low {lo20:.2f} on {surge:.1f}× volume, {day:.1f}% today", self.name)
+                p.meta["exit"] = dict(self.EXIT)
+                out.append(p)
+                self.last_signal[name] = t_now
+        return out
