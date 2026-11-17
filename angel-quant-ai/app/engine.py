@@ -71,6 +71,8 @@ class Engine:
         self._tok2sym: dict[str, str] = {}
         self.news = NewsBrain(self)                       # news & sentiment (Claude when a key is set, else a word list)
         self.learner = Learner(self)                      # daily learning loop: size weights + pauses per strategy
+        from app.ai.scorer import TradeBrain
+        self.brain = TradeBrain(self)                     # self-learning ML scorer: learns from every signal's real outcome
         self.running = True
         self.status = "starting"
         self.events: list[dict] = []
@@ -283,6 +285,8 @@ class Engine:
             asyncio.create_task(self.news.run())
         if self.s.learn_enabled:
             asyncio.create_task(self.learner.loop())
+        if self.s.brain_enabled:
+            await self.brain.load()
         if isinstance(self.broker, LiveBroker):
             asyncio.create_task(self.broker.run_sync())
             asyncio.create_task(self._reconcile_loop())
@@ -439,6 +443,8 @@ class Engine:
         off = {f for f, on in (("options_scalp", self.s.enable_options_scalping), ("options_directional", self.s.enable_options_directional),
                                 ("swing", self.s.enable_swing)) if not on}
         budget = budgets(self.stats, self.equity(), off)
+        if self.s.brain_enabled:
+            self.brain.update()                           # resolve shadow outcomes of earlier signals
         for strat in self.strategies:
             if not strat.enabled or strat.name in self.risk.st.disabled_strategies:
                 continue
@@ -460,13 +466,20 @@ class Engine:
                     plan.meta["learn_weight"] = w
                 t = self.md.ticks.get(self.key_for(plan.ins))
                 spread = (t.ask - t.bid) if t and t.bid and t.ask else None
-                evaluate(plan, self.charges, spread, self.s.min_net_reward_rupees, self.s.min_reward_risk)
+                explore = self.mode == "paper" and self.s.paper_explore
+                evaluate(plan, self.charges, spread, self.s.min_net_reward_rupees, self.s.min_reward_risk,
+                         check_ev=not explore)
                 side = "NEUTRAL" if plan.strategy in ("opt_iron_condor", "stock_vwap_reversion") else (
                     "LONG" if (plan.side == "BUY") == (plan.ins.right != "PE") else "SHORT")
                 if plan.strategy == "opt_debit_spread":
                     side = "LONG" if plan.ins.right == "CE" else "SHORT"
                 why = None
-                if not allowed(self.regime, plan.strategy, side):
+                feats = sh = None
+                if self.s.brain_enabled and plan.product == "INTRADAY" and plan.ins.lot <= 1 and plan.qty \
+                        and not plan.rejected.startswith(("quantity", "stop/target")):
+                    feats = self.brain.features(plan, side, spread)
+                    sh = self.brain.observe(plan, feats)
+                if not explore and not allowed(self.regime, plan.strategy, side):
                     why = f"regime {self.regime.label} does not allow {plan.strategy} {side.lower()}"
                 news = self.news.get(plan.underlying) if self.s.news_enabled else None
                 if not why and self.s.news_enabled and plan.ins.lot <= 1:
@@ -480,6 +493,12 @@ class Engine:
                             mv = (c[-1] / o[0] - 1) * 100
                             vr = (v[-5:].mean() / v[:-5].mean()) if len(v) > 10 and v[:-5].mean() > 0 else None
                     why = self.flow.gate(plan.underlying, side, mv, vr, news["score"] if news else None)
+                if not why and feats is not None:
+                    q0 = plan.qty
+                    why = self.brain.gate(plan, feats)
+                    if not why and plan.qty != q0:        # size changed by the brain → recompute costs and capital
+                        evaluate(plan, self.charges, spread, self.s.min_net_reward_rupees, self.s.min_reward_risk,
+                                 check_ev=not explore)
                 if not why:
                     fam = FAMILY.get(plan.strategy, plan.strategy)
                     used = sum(p.capital for p in positions if p.is_open and FAMILY.get(p.strategy) == fam)
@@ -512,6 +531,8 @@ class Engine:
                     self.signal_latency_ms.append((time.perf_counter() - t0) * 1000)
                     del self.signal_latency_ms[:-200]
                     self.store.signal(plan.strategy, plan.ins.symbol, "TRADED", plan.reason, plan.summary())
+                    if sh is not None:
+                        sh.traded = True
                     self.event("entry", f"{self.mode.upper()} {plan.side} {plan.qty} {plan.ins.symbol} @ {plan.entry} "
                                         f"(stop {plan.stop}, target {plan.target}, net ₹{plan.net_target:.0f} vs costs ₹{plan.charges_target:.0f})")
 

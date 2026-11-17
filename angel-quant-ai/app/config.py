@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     acceptance_min_paper_trades: int = 100
     acceptance_min_profit_factor: float = 1.2
     acceptance_min_net: float = 0.0                     # ordertag sent with every live order (audit trail)
-    paper_capital: float = 100_000.0
+    paper_capital: float = 1_000_000.0           # owner 17 Nov 2026: paper capital ₹10 lakh
 
     # ── API limits (SmartAPI: 10 order requests/s; we stay below) ──
     order_rate_per_sec: float = 8.0
@@ -61,9 +61,14 @@ class Settings(BaseSettings):
     learn_lookback_days: int = 20               # trading days of closed trades the loop looks at
     learn_min_trades: int = 15                  # less evidence than this → no change
     learn_pause_days: int = 5
+    # self-learning trade scorer (app/ai/scorer.py): learns from every signal's real outcome, retrained nightly
+    brain_enabled: bool = True
+    brain_min_samples: int = 300                # lessons needed before the first model
+    brain_min_auc: float = 0.55                 # adopt a model only if it beats chance on unseen recent days
+    brain_min_prob: float = 0.30                # skip signals whose win chance is below this (once a model is adopted)
     paper_test_start: str = "2026-11-16"         # owner 13 Nov 2026: 30-day paper test of the stocks-only mid/small-cap plan
     paper_test_days: int = 30
-    shortlist_size: int = 10                    # trade only the day's N most active stocks (turnover × move), refreshed every 15 min
+    shortlist_size: int = 30                    # trade only the day's N most active stocks (turnover × move), refreshed every 15 min
     max_stock_spread_pct: float = 0.15          # skip a stock while its bid–ask gap is wider than this (thin small caps)
     universe_keep_static: bool = False          # true: trade STOCK_UNIVERSE (large caps) as well
     # used when the index lists cannot be downloaded: Nifty Midcap Select top 10 (factsheet 30 Oct 2026) + Smallcap 50 names
@@ -80,29 +85,34 @@ class Settings(BaseSettings):
     # ── risk (₹) ──
     max_capital_per_trade_pct: float = 10.0
     max_risk_per_trade_pct: float = 0.5         # loss at stop as % of capital
-    max_open_positions: int = 4
+    max_open_positions: int = 10                # owner 17 Nov 2026: more paper trades (aim 50+/day)
     max_daily_loss_pct: float = 2.0
     max_weekly_loss_pct: float = 5.0
     max_drawdown_pct: float = 10.0
-    max_consecutive_losses: int = 4
+    max_consecutive_losses: int = 10
     max_option_premium_pct: float = 15.0        # total premium paid across open option buys
     max_per_underlying_pct: float = 20.0
     max_order_qty_lots: int = 4
-    min_net_reward_rupees: float = 150.0        # expected net profit after ALL costs, per trade
+    min_net_reward_rupees: float = 50.0         # expected net profit after ALL costs, per trade
     min_reward_risk: float = 1.5
+    # owner 17 Nov 2026: every stock trade's stop-loss sits this % from entry (0 = use each strategy's own stop)
+    stock_stop_pct: float = 2.0
+    # PAPER ONLY: collect more trades for the learning loop — every strategy may trade in every market regime and
+    # the negative-expected-value filter is skipped. Never applies in live mode.
+    paper_explore: bool = True
     stale_data_seconds: float = 5.0
     no_new_entries_after: time = time(14, 45)
     square_off_intraday_at: time = time(15, 12)
 
     # ── trailing / profit booking ──
-    trail_start_r: float = 1.0                  # start trailing once profit ≥ 1 × initial risk
+    trail_start_r: float = 0.5                  # start trailing once profit ≥ 0.5 × initial risk (+1% with a 2% stop)
     trail_gap_r: float = 0.8
-    partial_book_r: float = 1.5                 # book part of the position at 1.5 R
+    partial_book_r: float = 1.0                 # book part of the position at 1 R
     partial_book_fraction: float = 0.5
 
     # ── Claude decision support ──
     anthropic_api_key: SecretStr = SecretStr("")
-    claude_model: str = "claude-sonnet-5-5"
+    claude_model: str = "claude-haiku-5-5"      # owner 17 Nov 2026: Haiku during the paper test (CLAUDE_MODEL to change)
     claude_review_trades: bool = True           # Claude may veto a trade; it can never create or size one
     claude_timeout_s: float = 6.0
     claude_max_calls_per_hour: int = 60
