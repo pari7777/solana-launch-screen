@@ -41,6 +41,7 @@ class RiskManager:
         if self.st.day != n.date():
             self.st.day, self.st.realized_today, self.st.charges_today, self.st.trades_today = n.date(), 0.0, 0.0, 0
             self.st.capital_start_day = equity
+            self.st.consecutive_losses = 0     # a new day starts fresh (else yesterday's streak re-trips the switch)
             if self.st.kill_switch.startswith("daily"):
                 self.st.kill_switch = ""
         if self.st.week != wk:
