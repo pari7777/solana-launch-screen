@@ -31,7 +31,8 @@ log = logging.getLogger("aq.brain")
 STRATS = ("stock_orb", "stock_vwap_trend", "stock_vwap_reversion")
 REGIMES = ("BULL_TREND", "BEAR_TREND", "SIDEWAYS", "VOL_EXPANSION", "REVERSAL_UP", "REVERSAL_DOWN", "UNKNOWN")
 NUM = ("side", "minutes", "stop_pct", "target_pct", "rr", "win_prob", "news", "has_news", "news_event", "market_news",
-       "flow", "book", "spread_pct", "move_pct", "vol_ratio", "trend", "adx", "atr_pct", "vix", "vix_chg", "gap_pct", "breadth")
+       "flow", "book", "spread_pct", "move_pct", "vol_ratio", "trend", "adx", "atr_pct", "vix", "vix_chg", "gap_pct", "breadth",
+       "momentum")
 FEATURES = NUM + tuple(f"s_{x}" for x in STRATS) + tuple(f"r_{x}" for x in REGIMES)
 
 
@@ -112,7 +113,8 @@ class TradeBrain:
              "flow": fl.get("flow_score"), "book": fl.get("book_pressure"),
              "spread_pct": (spread / e * 100) if spread and e else None, "move_pct": mv, "vol_ratio": vr,
              "trend": r.trend, "adx": r.adx, "atr_pct": r.atr_pct, "vix": r.vix, "vix_chg": r.vix_change_pct,
-             "gap_pct": r.gap_pct, "breadth": r.breadth}
+             "gap_pct": r.gap_pct, "breadth": r.breadth,
+             "momentum": self.e.momentum.get(plan.underlying) if hasattr(self.e, "momentum") else None}
         for x in STRATS:
             f[f"s_{x}"] = 1.0 if plan.strategy == x else 0.0
         for x in REGIMES:
@@ -183,13 +185,21 @@ class TradeBrain:
         except Exception as ex:  # noqa: BLE001
             log.warning("brain load: %s", ex)
 
-    async def train(self) -> list[str]:
-        rows = await self.e.store.ml_samples(days=60)
-        if not rows:
+    async def train(self, rows: list[dict] | None = None, arrays: tuple | None = None) -> list[str]:
+        """rows: [{t, label, feats|x}] (sorted here by time), or arrays=(t, X, y) already built (pre-training)."""
+        if arrays is not None:
+            t_, X, y = arrays
+            o = np.argsort(t_, kind="stable")
+            X, y = np.asarray(X, dtype=float)[o], np.asarray(y)[o]
+        else:
+            rows = rows if rows is not None else await self.e.store.ml_samples(days=self.s.brain_pretrain_days + 30)
+            if not rows:
+                return ["trade brain: no signals recorded yet"]
+            rows.sort(key=lambda r: r["t"])
+            X = np.array([r["x"] if "x" in r else vector(r["feats"]) for r in rows], dtype=float)
+            y = np.array([int(r["label"]) for r in rows])
+        if not len(y):
             return ["trade brain: no signals recorded yet"]
-        rows.sort(key=lambda r: r["t"])
-        X = np.array([vector(r["feats"]) for r in rows], dtype=float)
-        y = np.array([int(r["label"]) for r in rows])
         n, pos = len(y), int(y.sum())
         need = self.s.brain_min_samples
         if n < need or pos < 25 or n - pos < 25:
