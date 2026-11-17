@@ -28,7 +28,7 @@ import numpy as np
 from app.clock import minutes_since_open, now_ist
 
 log = logging.getLogger("aq.brain")
-STRATS = ("stock_orb", "stock_vwap_trend", "stock_vwap_reversion")
+STRATS = ("stock_orb", "stock_vwap_trend", "stock_vwap_reversion", "stock_momentum_burst")
 REGIMES = ("BULL_TREND", "BEAR_TREND", "SIDEWAYS", "VOL_EXPANSION", "REVERSAL_UP", "REVERSAL_DOWN", "UNKNOWN")
 NUM = ("side", "minutes", "stop_pct", "target_pct", "rr", "win_prob", "news", "has_news", "news_event", "market_news",
        "flow", "book", "spread_pct", "move_pct", "vol_ratio", "trend", "adx", "atr_pct", "vix", "vix_chg", "gap_pct", "breadth",
@@ -71,6 +71,7 @@ class Shadow:
     t0: float
     traded: bool = False
     done: bool = False
+    exit: dict | None = None
 
 
 @dataclass
@@ -131,7 +132,8 @@ class TradeBrain:
             return None
         self.recent[k] = now
         sh = Shadow(self.e.key_for(plan.ins), plan.strategy, plan.ins.symbol, plan.side, plan.entry, plan.stop, plan.target,
-                    plan.qty, plan.net_target, plan.net_stop, plan.charges_target, feats, now)
+                    plan.qty, plan.net_target, plan.net_stop, plan.charges_target, feats, now,
+                    exit=plan.meta.get("exit"))
         self.open.append(sh)
         self.today["observed"] += 1
         return sh
@@ -156,6 +158,21 @@ class TradeBrain:
             hit_tgt = (hh >= sh.target) if buy else (ll <= sh.target)
             i_s = int(np.argmax(hit_stop)) if hit_stop.any() else None
             i_t = int(np.argmax(hit_tgt)) if hit_tgt.any() else None
+            xr = sh.exit or {}
+            risk = abs(sh.entry - sh.stop) or 1e-9
+            if xr.get("partial_book_r"):                  # fast trades: half booked at the milestone counts as a win
+                fav = ((hh if buy else ll) - sh.entry) * (1 if buy else -1) / risk
+                hit_p = fav >= xr["partial_book_r"]
+                i_p = int(np.argmax(hit_p)) if hit_p.any() else None
+                if i_p is not None and (i_s is None or i_p < i_s):
+                    self._resolve(sh, 1, 0.5 * xr["partial_book_r"] * risk * sh.qty - sh.charges, "partial")
+                    continue
+            if xr.get("time_stop_min") and i_s is None and i_t is None and len(cc) >= xr["time_stop_min"]:
+                k = xr["time_stop_min"] - 1
+                if (float(cc[k]) - sh.entry) * (1 if buy else -1) / risk < xr.get("time_stop_min_r", 0.25):
+                    net = (float(cc[k]) - sh.entry) * (1 if buy else -1) * sh.qty - sh.charges
+                    self._resolve(sh, 1 if net > 0 else 0, net, "time stop")
+                    continue
             if i_s is not None and (i_t is None or i_s <= i_t):
                 self._resolve(sh, 0, sh.net_stop, "stop")
             elif i_t is not None:
@@ -216,7 +233,7 @@ class TradeBrain:
             return [f"trade brain: new model not adopted — hold-out AUC {a:.2f} < {self.s.brain_min_auc} (no real edge found yet; "
                     f"{n} lessons, win rate {base:.0%})" + (f"; keeping previous model (AUC {old:.2f})" if old else "")]
         self.state = BrainState(model, {"n": n, "auc": round(a, 3), "base_rate": round(base, 3), "trained_at": time.time(),
-                                        "day": now_ist().date().isoformat()})
+                                        "day": now_ist().date().isoformat(), "settings": getattr(model, "aq_settings", {})})
         try:
             os.makedirs(self.s.data_dir, exist_ok=True)
             with open(self.path, "wb") as fh:
@@ -228,12 +245,28 @@ class TradeBrain:
 
     @staticmethod
     def _fit(X, y, cut):
+        """Time-ordered: tune on [0, 70 %) → pick settings on [70 %, 80 %) → final score on the unseen last 20 %.
+        Recent lessons weigh more (half-life ≈ 20 % of the history), so the model follows how the market behaves now."""
         from sklearn.ensemble import HistGradientBoostingClassifier
-        mk = lambda: HistGradientBoostingClassifier(max_depth=3, max_iter=200, learning_rate=0.05, l2_regularization=1.0,  # noqa: E731
-                                                    min_samples_leaf=20, random_state=7)
-        m = mk().fit(X[:cut], y[:cut])
+        n = len(y)
+        w = 0.5 ** ((n - 1 - np.arange(n)) / max(1.0, 0.2 * n))
+        grid = [dict(max_depth=3, learning_rate=0.05, max_iter=200, min_samples_leaf=40),
+                dict(max_depth=4, learning_rate=0.05, max_iter=300, min_samples_leaf=60),
+                dict(max_depth=2, learning_rate=0.08, max_iter=150, min_samples_leaf=30),
+                dict(max_depth=5, learning_rate=0.03, max_iter=400, min_samples_leaf=100)]
+        mk = lambda g: HistGradientBoostingClassifier(l2_regularization=1.0, random_state=7, early_stopping=False, **g)  # noqa: E731
+        v0 = int(n * 0.7)
+        best, best_a = grid[0], -1.0
+        if v0 > 100 and cut - v0 > 50:
+            for g in grid:
+                m = mk(g).fit(X[:v0], y[:v0], sample_weight=w[:v0])
+                a_ = auc(y[v0:cut], m.predict_proba(X[v0:cut])[:, 1])
+                if a_ > best_a:
+                    best, best_a = g, a_
+        m = mk(best).fit(X[:cut], y[:cut], sample_weight=w[:cut])
         a = auc(y[cut:], m.predict_proba(X[cut:])[:, 1])
-        final = mk().fit(X, y)                       # adopted model uses every lesson, incl. the newest days
+        final = mk(best).fit(X, y, sample_weight=w)   # adopted model uses every lesson, incl. the newest days
+        final.aq_settings = best
         return final, a, float(y.mean())
 
     # ── 4. use ──

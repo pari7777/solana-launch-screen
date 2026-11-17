@@ -30,10 +30,10 @@ from app.market.feed import Candle, Series
 from app.market.momentum import ranks
 from app.market.regime import Regime, detect
 from app.strategies.base import evaluate
-from app.strategies.stock_intraday import OpeningRangeBreakout, VwapReversion, VwapTrendPullback
+from app.strategies.stock_intraday import MomentumBurst, OpeningRangeBreakout, VwapReversion, VwapTrendPullback
 
 log = logging.getLogger("aq.pretrain")
-STRATS = (OpeningRangeBreakout, VwapTrendPullback, VwapReversion)
+STRATS = (OpeningRangeBreakout, VwapTrendPullback, VwapReversion, MomentumBurst)
 
 
 def _rows_to_candles(rows: list[list]) -> list[Candle]:
@@ -149,12 +149,23 @@ def _replay_stock(s, im, name: str, candles: list[Candle], regimes: dict[int, Re
         keep = []
         for sh in shadows:
             buy = sh["side"] == "BUY"
+            dd = 1 if buy else -1
             hit_s = c.l <= sh["stop"] if buy else c.h >= sh["stop"]
             hit_t = c.h >= sh["target"] if buy else c.l <= sh["target"]
+            xr = sh.get("exit") or {}
+            risk = abs(sh["entry"] - sh["stop"]) or 1e-9
+            fav_r = ((c.h if buy else c.l) - sh["entry"]) * dd / risk
             if hit_s:
                 resolve(sh, 0, sh["net_stop"], "stop")
+            elif xr.get("partial_book_r") and fav_r >= xr["partial_book_r"]:
+                g = 0.5 * xr["partial_book_r"] * risk * sh["qty"] - sh["chg"]     # half booked, rest at break-even
+                resolve(sh, 1 if g > 0 else 0, g, "partial")
             elif hit_t:
                 resolve(sh, 1, sh["net_target"], "target")
+            elif xr.get("time_stop_min") and c.ts - sh["t0"] >= xr["time_stop_min"] * 60 \
+                    and (c.c - sh["entry"]) * dd / risk < xr.get("time_stop_min_r", 0.25):
+                g = (c.c - sh["entry"]) * dd * sh["qty"] - sh["chg"]
+                resolve(sh, 1 if g > 0 else 0, g, "time stop")
             elif now.time() >= sq:
                 g = (c.c - sh["entry"]) * (1 if buy else -1) * sh["qty"] - sh["chg"]
                 resolve(sh, 1 if g > 0 else 0, g, "square-off")
@@ -198,7 +209,8 @@ def _replay_stock(s, im, name: str, candles: list[Candle], regimes: dict[int, Re
                     f[f"r_{x}"] = 1.0 if reg.label == x else 0.0
                 shadows.append({"t0": c.ts + 60, "strategy": plan.strategy, "side": plan.side, "entry": plan.entry,
                                 "stop": plan.stop, "target": plan.target, "qty": plan.qty, "net_target": plan.net_target,
-                                "net_stop": plan.net_stop, "chg": plan.charges_target, "feats": f})
+                                "net_stop": plan.net_stop, "chg": plan.charges_target, "feats": f,
+                                "exit": plan.meta.get("exit")})
     return out
 
 
