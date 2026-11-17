@@ -73,6 +73,8 @@ class Engine:
         self.learner = Learner(self)                      # daily learning loop: size weights + pauses per strategy
         from app.ai.scorer import TradeBrain
         self.brain = TradeBrain(self)                     # self-learning ML scorer: learns from every signal's real outcome
+        from app.market.momentum import Momentum
+        self.momentum = Momentum()                        # research rule: 20-day momentum rank of every universe stock
         self.running = True
         self.status = "starting"
         self.events: list[dict] = []
@@ -287,6 +289,8 @@ class Engine:
             asyncio.create_task(self.learner.loop())
         if self.s.brain_enabled:
             await self.brain.load()
+            asyncio.create_task(self._brain_start())
+        asyncio.create_task(self._momentum_loop())
         if isinstance(self.broker, LiveBroker):
             asyncio.create_task(self.broker.run_sync())
             asyncio.create_task(self._reconcile_loop())
@@ -432,6 +436,62 @@ class Engine:
         self.regime = detect(arr, t.close if t else None, t.open if t else None, vix_t.ltp if vix_t else None,
                              vix_t.close if vix_t else None, adv, dec, orng)
 
+    async def _momentum_loop(self):
+        while True:
+            try:
+                if self.momentum.day != now_ist().date().isoformat() and self.s.stocks:
+                    await self.momentum.refresh(list(self.s.stocks))
+                    self.event("momentum", self.momentum.note)
+            except Exception as e:  # noqa: BLE001
+                log.warning("momentum loop: %s", e)
+            await asyncio.sleep(1800)
+
+    async def _brain_start(self):
+        """After start-up: replay past market data once (pre-training), else retrain from saved lessons."""
+        from app.ai.pretrain import pretrain
+        from app.clock import market_open
+        try:
+            done = await self.store.kv_get("brain_pretrained")
+            while market_open():                          # never during the session — it uses a lot of CPU
+                await asyncio.sleep(300)
+            await asyncio.sleep(90)                       # let login, universe and instruments load first
+            if not done:
+                msgs = await pretrain(self, self.s.brain_pretrain_days)
+                for m in msgs:
+                    self.event("pretrain", m)
+            elif self.brain.state.model is None:
+                self.brain.last_log = await self.brain.train()
+                for m in self.brain.last_log:
+                    self.event("learn", m)
+        except Exception as e:  # noqa: BLE001
+            log.exception("brain start: %s", e)
+            self.event("pretrain", f"pre-training failed: {type(e).__name__}: {str(e)[:120]}")
+
+    def _research_rules(self, plan, side: str) -> str | None:
+        """Rules backed by public research on Indian stocks. Returns a reason to skip, or None (may halve the size)."""
+        s = self.s
+        if plan.product != "INTRADAY" or plan.ins.lot > 1:
+            return None
+        if minutes_since_open() < s.rule_skip_open_min:
+            return f"rule: first {s.rule_skip_open_min} minutes after the open are too noisy"
+        vix = self.regime.vix
+        if vix and vix >= s.vix_no_entries:
+            return f"rule: India VIX {vix:.1f} ≥ {s.vix_no_entries:.0f} — too volatile for new trades"
+        if s.rule_momentum:
+            m = self.momentum.get(plan.underlying)
+            if m is not None and side == "LONG" and m < s.momentum_block_pct:
+                return f"rule: {plan.underlying} is among the weakest 20-day performers (rank {m:.0%}) — no long"
+            if m is not None and side == "SHORT" and m > 1 - s.momentum_block_pct:
+                return f"rule: {plan.underlying} is among the strongest 20-day performers (rank {m:.0%}) — no short"
+        if vix and vix >= s.vix_half_size and plan.qty > 1:
+            plan.qty = max(1, plan.qty // 2)
+            plan.meta["vix_half"] = True
+            evaluate(plan, self.charges, None, s.min_net_reward_rupees, s.min_reward_risk,
+                     check_ev=not (self.mode == "paper" and s.paper_explore))
+            if plan.rejected:
+                return plan.rejected
+        return None
+
     def _context(self) -> dict:
         return {"time_ist": now_ist().strftime("%H:%M"), "regime": self.regime.as_dict(), "minutes_since_open": round(minutes_since_open()),
                 "open_positions": len([p for p in self.oms.positions.values() if p.is_open]),
@@ -493,6 +553,8 @@ class Engine:
                             mv = (c[-1] / o[0] - 1) * 100
                             vr = (v[-5:].mean() / v[:-5].mean()) if len(v) > 10 and v[:-5].mean() > 0 else None
                     why = self.flow.gate(plan.underlying, side, mv, vr, news["score"] if news else None)
+                if not why:
+                    why = self._research_rules(plan, side)
                 if not why and feats is not None:
                     q0 = plan.qty
                     why = self.brain.gate(plan, feats)

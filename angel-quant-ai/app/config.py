@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     brain_min_samples: int = 300                # lessons needed before the first model
     brain_min_auc: float = 0.55                 # adopt a model only if it beats chance on unseen recent days
     brain_min_prob: float = 0.30                # skip signals whose win chance is below this (once a model is adopted)
+    brain_pretrain_days: int = 365              # past days replayed once (Angel One history; Yahoo gives ~29 days)
+    # ── research rules (owner 17 Nov 2026) ──
+    rule_skip_open_min: int = 10                # no new entries in the first N minutes after 09:15 (noisy auction prices)
+    rule_momentum: bool = True                  # no longs in the weakest, no shorts in the strongest 20-day performers
+    momentum_block_pct: float = 0.30            # weakest/strongest 30 % of the universe
+    vix_half_size: float = 20.0                 # India VIX above this → half size on new trades
+    vix_no_entries: float = 25.0                # India VIX above this → no new trades
     paper_test_start: str = "2026-11-16"         # owner 13 Nov 2026: 30-day paper test of the stocks-only mid/small-cap plan
     paper_test_days: int = 30
     shortlist_size: int = 30                    # trade only the day's N most active stocks (turnover × move), refreshed every 15 min
