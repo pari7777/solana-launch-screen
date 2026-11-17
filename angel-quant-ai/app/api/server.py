@@ -98,12 +98,32 @@ def build_app(engine: Engine, password: str) -> FastAPI:
         data, mime, name = build_report(kind, rows, fmt)
         return StreamingResponse(io.BytesIO(data), media_type=mime, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
-    @app.get("/api/backup", dependencies=[Depends(auth)])
+    async def backup_key() -> str:
+        """A separate random key just for the Google Drive copy, created once and shown on the dashboard,
+        so the owner never has to find or type the dashboard password."""
+        k = getattr(engine, "_backup_key", None) or await engine.store.kv_get("backup_key")
+        if not k:
+            k = secrets.token_urlsafe(24)
+            engine.store.kv_put("backup_key", k)
+        engine._backup_key = k
+        return k
+
+    async def backup_auth(request: Request, creds: HTTPBasicCredentials | None = Depends(security)):
+        q = request.query_params.get("key", "")
+        if q and secrets.compare_digest(q.encode(), (await backup_key()).encode()):
+            return True
+        return auth(creds)
+
+    @app.get("/api/backup-key", dependencies=[Depends(auth)])
+    async def get_backup_key():
+        return {"key": await backup_key()}
+
+    @app.get("/api/backup", dependencies=[Depends(backup_auth)])
     async def backup_index():
         """What a daily off-site copy should fetch (used by the owner's Google Drive Apps Script)."""
         return {"parts": await engine.store.backup_parts(), "day": now_ist().date().isoformat(), "db": engine.store.kind}
 
-    @app.get("/api/backup/{part}", dependencies=[Depends(auth)])
+    @app.get("/api/backup/{part}", dependencies=[Depends(backup_auth)])
     async def backup_part(part: str):
         """One part as gzipped JSON lines: {"table": …, "row": {…}} per line. Never contains secrets or the .env file."""
         import gzip
