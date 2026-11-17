@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 PRIOR_P, PRIOR_N = 0.40, 20
 FAMILY = {"stock_orb": "stock_intraday", "stock_vwap_trend": "stock_intraday", "stock_vwap_reversion": "stock_intraday",
+          "stock_momentum_burst": "stock_intraday",
           "opt_momentum": "options_scalp", "opt_debit_spread": "options_directional", "opt_iron_condor": "options_directional",
           "swing": "swing"}
 BASE_WEIGHTS = {"stock_intraday": 0.35, "options_scalp": 0.15, "options_directional": 0.20, "swing": 0.10, "cash_reserve": 0.20}
