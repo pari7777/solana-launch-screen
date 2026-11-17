@@ -7,7 +7,9 @@ the day's shortlist from Google News RSS (India edition, last 24 h), and scores 
 to +1 (clearly positive):
   * with ANTHROPIC_API_KEY: Claude reads the headlines and scores them (one batched call), flags results/board-meeting
     days and anything that makes intraday trading unusually risky;
-  * without it: a simple word list (upgrade, wins order, profit up … / downgrade, fraud, raid, loss widens …).
+  * without it: the bot's own FinBERT model (app/ai/nlp.py) reads every headline on the server; the word list
+    (upgrade, wins order … / downgrade, fraud …) is only the last fallback when the model cannot load.
+Headlines that do not name the company are dropped (relevance filter), so news is never blamed on the wrong stock.
 Used by the engine to (a) block entries against strongly opposite news, (b) skip stocks with a pending event,
 (c) give Claude's trade review the headlines. It never creates a trade by itself.
 """
@@ -24,7 +26,9 @@ from urllib.parse import quote_plus
 
 import httpx
 
+from app.ai.nlp import FINBERT, aggregate, aliases, relevant, short_name
 from app.clock import market_open, now_ist
+from app.market.universe import COMPANY
 
 log = logging.getLogger("aq.news")
 RSS = "https://news.google.com/rss/search?q={q}+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
@@ -105,29 +109,52 @@ class NewsBrain:
             log.warning("news %s: %s", q, ex)
             return []
 
+    async def _fetch_stock(self, c: httpx.AsyncClient, sym: str) -> list[dict]:
+        """Headlines that actually name this company (search by company name, then the relevance filter)."""
+        ins = self.e.im.equity.get(sym)
+        iname = (getattr(ins, "name", "") or "").replace("-EQ", "").strip()
+        company = COMPANY.get(sym) or (iname if iname and iname.upper() != sym else "")
+        q = f'"{short_name(company)}" share' if company else f"{sym} share NSE"
+        hs = await self._fetch(c, q)
+        names = aliases(sym, company)
+        return [h for h in hs if relevant(h["title"], names)]
+
+    async def _local_score(self, got: dict[str, list[dict]]) -> dict[str, float]:
+        """FinBERT score per stock (and '_market'), or {} when the model is unavailable."""
+        flat = [(k, h["title"]) for k, hs in got.items() for h in hs[:6]]
+        res = await FINBERT.score_titles([t for _, t in flat])
+        if not res:
+            return {}
+        per: dict[str, list] = {}
+        for (k, _), r in zip(flat, res):
+            per.setdefault(k, []).append(r)
+        return {k: aggregate(v) for k, v in per.items()}
+
     async def refresh(self) -> None:
         syms = list(self.e.shortlist())[: self.e.s.shortlist_size or 10]
         async with httpx.AsyncClient(timeout=12, headers=UA, follow_redirects=True) as c:
             market = await self._fetch(c, "Sensex Nifty stock market today")
             got = {}
             for sym in syms:
-                ins = self.e.im.equity.get(sym)
-                name = (getattr(ins, "name", "") or sym).replace("-EQ", "")
-                got[sym] = await self._fetch(c, f"{name} share NSE")
+                got[sym] = await self._fetch_stock(c, sym)
                 await asyncio.sleep(0.4)
         scored = await self._claude_score(market, got) if self.e.claude.enabled else None
+        local = await self._local_score({**got, "_market": market}) if not scored else {}
         now = time.time()
         ms, mev = lexicon_score([h["title"] for h in market])
+        ms = local.get("_market", ms)
         self.market = {"score": (scored or {}).get("_market", {}).get("score", ms), "headlines": market[:5],
                        "why": (scored or {}).get("_market", {}).get("why", ""), "at": now}
         for sym, hs in got.items():
             sc, ev = lexicon_score([h["title"] for h in hs])
             src = "words"
             why = ""
+            if sym in local:
+                sc, src = local[sym], "finbert"
             if scored and sym in scored:
                 sc, ev, why, src = scored[sym].get("score", sc), bool(scored[sym].get("event", ev)), scored[sym].get("why", ""), "claude"
             self.by_stock[sym] = {"score": round(float(sc), 2), "event": ev, "headlines": hs[:4], "why": str(why)[:160], "at": now, "source": src}
-        self.e.event("news", f"news & sentiment for {len(got)} stocks + market ({'Claude' if scored else 'word list'}): "
+        self.e.event("news", f"news & sentiment for {len(got)} stocks + market ({'Claude' if scored else 'FinBERT' if local else 'word list'}): "
                      + ", ".join(f"{k} {v['score']:+.1f}" for k, v in list(self.by_stock.items())[:10] if k in got))
 
     MORNING = ("GIFT Nifty today", "Sensex Nifty outlook today", "US stock market Dow Nasdaq overnight", "Asian markets today Nikkei",
@@ -143,9 +170,7 @@ class NewsBrain:
                 await asyncio.sleep(0.4)
             got: dict[str, list[dict]] = {}
             for sym in syms:
-                ins = self.e.im.equity.get(sym)
-                name = (getattr(ins, "name", "") or sym).replace("-EQ", "")
-                got[sym] = await self._fetch(c, f"{name} share NSE")
+                got[sym] = await self._fetch_stock(c, sym)
                 await asyncio.sleep(0.5)
         market = [h for v in cues.values() for h in v]
         scored: dict = {}
@@ -155,14 +180,18 @@ class NewsBrain:
                 part = await self._claude_score(market[:12], dict(items[i:i + 25]))
                 if part:
                     scored.update(part)
+        local = await self._local_score({**got, "_market": market}) if not scored else {}
         now = time.time()
         for sym, hs in got.items():
             sc, ev = lexicon_score([h["title"] for h in hs])
             why, src = "", "words"
+            if sym in local:
+                sc, src = local[sym], "finbert"
             if sym in scored and isinstance(scored[sym], dict):
                 sc, ev, why, src = scored[sym].get("score", sc), bool(scored[sym].get("event", ev)), scored[sym].get("why", ""), "claude"
             self.by_stock[sym] = {"score": round(float(sc), 2), "event": ev, "headlines": hs[:4], "why": str(why)[:160], "at": now, "source": src}
         ms, _ = lexicon_score([h["title"] for h in market])
+        ms = local.get("_market", ms)
         mk = scored.get("_market") if isinstance(scored.get("_market"), dict) else {}
         self.market = {"score": mk.get("score", ms), "headlines": market[:6], "why": mk.get("why", ""), "at": now}
         ranked = sorted(((v["score"], k) for k, v in self.by_stock.items() if k in got), reverse=True)
@@ -210,6 +239,7 @@ class NewsBrain:
             return None
 
     async def run(self) -> None:
+        await FINBERT.ensure()                            # load the model once at start-up (≈10–30 s, in a worker thread)
         while True:
             try:
                 n = now_ist()
@@ -227,4 +257,5 @@ class NewsBrain:
 
     def snapshot(self) -> dict:
         return {"premarket": self.premarket, "market": self.market, "stocks": {k: v for k, v in self.by_stock.items() if time.time() - v["at"] < 6 * 3600},
-                "every_min": self.e.s.news_every_min, "block_score": self.e.s.news_block_score, "_open": market_open()}
+                "every_min": self.e.s.news_every_min, "block_score": self.e.s.news_block_score, "_open": market_open(),
+                "model": FINBERT.state}

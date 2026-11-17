@@ -95,6 +95,10 @@ class Learner:
         st, ch = decide(self.state, by, s)
         self.state.update(st)
         changes += ch
+        if getattr(self.e.s, "brain_enabled", False) and hasattr(self.e, "brain"):
+            bl = await self.e.brain.train()               # nightly retrain of the self-learning trade scorer
+            self.e.brain.last_log = bl
+            changes += bl
         note = await self._lessons(by, changes)
         day = now_ist().date().isoformat()
         self.state["last_day"] = day
