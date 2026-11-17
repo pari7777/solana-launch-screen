@@ -44,6 +44,12 @@ a{color:var(--b)}
 </div>
 <div class="card" id="testcard"><h2>30-day paper test — stocks only (mid &amp; small caps)</h2><div id="tc">loading…</div></div>
 <div class="card"><h2>AI brain — news, sentiment &amp; daily learning</h2><div id="brain">waiting for first news check…</div></div>
+<div class="card"><h2>Google Drive backup key</h2><div class="sm mut">Paste this into the Apps Script (Project Settings → Script properties → BACKUP_KEY). It only allows downloading backups, nothing else.</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px"><code id="bkey" style="user-select:all;word-break:break-all">loading…</code><button id="bcopy" type="button">Copy</button></div></div>
+<script>
+(async()=>{try{const r=await fetch('/api/backup-key',{credentials:'same-origin'});const j=await r.json();document.getElementById('bkey').textContent=j.key;
+document.getElementById('bcopy').onclick=async()=>{try{await navigator.clipboard.writeText(j.key);document.getElementById('bcopy').textContent='Copied';}catch(e){const s=window.getSelection(),g=document.createRange();g.selectNodeContents(document.getElementById('bkey'));s.removeAllRanges();s.addRange(g);}};}catch(e){document.getElementById('bkey').textContent='not available yet (bot not updated)';}})();
+</script>
 <div class="two">
 <div class="card"><h2>Risk</h2><div id="risk"></div></div>
 <div class="card"><h2>Claude</h2><div id="claude"></div></div>
