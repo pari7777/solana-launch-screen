@@ -65,7 +65,8 @@ class TradePlan:
                 "reason": self.reason, "regime": self.regime, "underlying": self.underlying, "rejected": self.rejected}
 
 
-def evaluate(plan: TradePlan, model: ChargeModel, spread: float | None, min_net: float, min_rr: float) -> TradePlan:
+def evaluate(plan: TradePlan, model: ChargeModel, spread: float | None, min_net: float, min_rr: float,
+             check_ev: bool = True) -> TradePlan:
     """Fill in costs and expected values. Sets plan.rejected when the trade does not pay for itself."""
     seg = segment_of(plan.ins.itype, plan.product)
     q, d = plan.qty, plan.direction
@@ -107,7 +108,7 @@ def evaluate(plan: TradePlan, model: ChargeModel, spread: float | None, min_net:
         plan.rejected = f"net profit at target ₹{plan.net_target:.0f} < ₹{min_net:.0f} after ₹{c_t + slip_target:.0f} costs"
     elif plan.rr < min_rr:
         plan.rejected = f"net reward/risk {plan.rr:.2f} < {min_rr}"
-    elif plan.ev <= 0:
+    elif check_ev and plan.ev <= 0:
         plan.rejected = f"negative expected value ₹{plan.ev:.0f} at win rate {plan.win_prob:.0%}"
     return plan
 

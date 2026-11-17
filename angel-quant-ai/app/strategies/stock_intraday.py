@@ -43,6 +43,14 @@ class StockStrategy(Strategy):
     def plan(self, ins, name, side, entry, stop, target, reason, sid) -> TradePlan:
         tick = ins.tick
         entry = round_tick(entry, tick)
+        pct = getattr(self.ctx.s, "stock_stop_pct", 0) or 0
+        if pct > 0 and entry > 0:
+            # fixed % stop (owner setting); target keeps at least min_reward_risk × the stop distance
+            dist = entry * pct / 100
+            want = dist * (getattr(self.ctx.s, "min_reward_risk", 1.5) + 0.1)
+            tgt_dist = max(abs(target - entry), want)
+            stop = entry - dist if side == "BUY" else entry + dist
+            target = entry + tgt_dist if side == "BUY" else entry - tgt_dist
         stop = round_tick(stop, tick, up=(side == "SELL"))
         target = round_tick(target, tick, up=(side == "BUY"))
         q = size_by_risk(self.ctx, entry, stop)
