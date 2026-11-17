@@ -130,7 +130,7 @@ class Position:
         return self.gross - self.charges_actual
 
     def unrealized(self) -> float:
-        if not self.is_open or not self.qty:
-            return 0.0
+        if not self.is_open or not self.qty or self.mark <= 0:
+            return 0.0      # no price yet (just opened) — not a loss
         d = 1 if self.side == "BUY" else -1
         return (self.mark - self.entry_price) * d * self.qty
