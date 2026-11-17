@@ -24,6 +24,7 @@ class Store:
         self.mem_closed: list[dict] = []
         self.mem_signals: list[dict] = []
         self.mem_kv: dict[str, object] = {}
+        self.mem_ml: list[dict] = []
         self.errors = 0
 
     @property
@@ -108,6 +109,26 @@ class Store:
         log.info("[%s] %s", kind, message)
         self._put("INSERT INTO audit_log (kind, message, data) VALUES ($1,$2,$3)", kind, message,
                   json.dumps(data or {}, default=str))
+
+    def ml_sample(self, strategy: str, symbol: str, side: str, traded: bool, label: int, net: float, outcome: str, feats: dict, t: float):
+        self.mem_ml.append({"t": t, "strategy": strategy, "symbol": symbol, "label": label, "net": net, "feats": feats})
+        del self.mem_ml[:-20000]
+        self._put("INSERT INTO ml_samples (signal_at, strategy, symbol, side, traded, label, net, outcome, feats) "
+                  "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                  _ts(t), strategy, symbol, side, traded, int(label), float(net), outcome, json.dumps(feats, default=str))
+
+    async def ml_samples(self, days: int = 60) -> list[dict]:
+        if not self.pool:
+            return list(self.mem_ml)
+        async with self.pool.acquire() as c:
+            rows = await c.fetch("SELECT signal_at, strategy, symbol, label, net, feats FROM ml_samples "
+                                 "WHERE signal_at > now() - make_interval(days => $1) ORDER BY signal_at", days)
+        out = []
+        for r in rows:
+            f = r["feats"]
+            out.append({"t": r["signal_at"].timestamp(), "strategy": r["strategy"], "symbol": r["symbol"], "label": r["label"],
+                        "net": r["net"], "feats": json.loads(f) if isinstance(f, str) else f})
+        return out
 
     async def kv_get(self, k: str, default=None):
         if not self.pool:
