@@ -143,6 +143,36 @@ class Store:
             out.append({"t": r["signal_at"].timestamp(), "label": r["label"], "x": vector(json.loads(f) if isinstance(f, str) else f)})
         return out
 
+    # ── backup export (Google Drive copy via the owner's own Apps Script; secrets are never in the database) ──
+    BACKUP_TABLES = {"trades": [("positions", None), ("orders", None), ("kv", None)],
+                     "log": [("signals", "at"), ("audit_log", "at")]}
+
+    async def backup_parts(self) -> list[str]:
+        parts = ["trades", "log"]
+        if self.pool:
+            async with self.pool.acquire() as c:
+                months = await c.fetch("SELECT DISTINCT to_char(signal_at, 'YYYY-MM') m FROM ml_samples ORDER BY 1")
+            parts += [f"lessons-{r['m']}" for r in months if r["m"]]
+        return parts
+
+    async def backup_rows(self, part: str):
+        """Yields (table, row-dict) for one backup part. 'log' covers the last 35 days; lessons go month by month."""
+        if not self.pool:
+            return
+        if part.startswith("lessons-"):
+            ym = part.split("-", 1)[1]
+            q = [("ml_samples", "SELECT * FROM ml_samples WHERE to_char(signal_at, 'YYYY-MM') = $1 ORDER BY id", (ym,))]
+        elif part in self.BACKUP_TABLES:
+            q = [(t, f"SELECT * FROM {t}" + (f" WHERE {col} > now() - interval '35 days'" if col else ""), ())
+                 for t, col in self.BACKUP_TABLES[part]]
+        else:
+            raise KeyError(part)
+        async with self.pool.acquire() as c:
+            for t, sql, args in q:
+                async with c.transaction():
+                    async for r in c.cursor(sql, *args, prefetch=2000):
+                        yield t, dict(r)
+
     async def kv_get(self, k: str, default=None):
         if not self.pool:
             return self.mem_kv.get(k, default)
