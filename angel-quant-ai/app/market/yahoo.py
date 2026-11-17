@@ -64,3 +64,22 @@ async def candles_many(items: list[tuple[str, str]], days: int = 5, parallel: in
                     log.info("yahoo %s: %s", tk, e)
         await asyncio.gather(*(one(k, t) for k, t in items))
     return out
+
+
+async def chart_many(items: list[tuple[str, str]], params: dict, parallel: int = 4) -> dict[str, list[list]]:
+    """Like candles_many, with any chart params (interval/range or period1/period2). A failing ticker is skipped."""
+    out: dict[str, list[list]] = {}
+    sem = asyncio.Semaphore(parallel)
+    async with httpx.AsyncClient(timeout=20, headers=UA, follow_redirects=True) as c:
+        async def one(key: str, tk: str):
+            async with sem:
+                try:
+                    r = await c.get(URL.format(sym=quote(tk, safe="^._")), params=params)
+                    if r.status_code == 200:
+                        rows = parse(r.json())
+                        if rows:
+                            out[key] = rows
+                except (httpx.HTTPError, ValueError) as e:
+                    log.info("yahoo %s: %s", tk, e)
+        await asyncio.gather(*(one(k, t) for k, t in items))
+    return out
