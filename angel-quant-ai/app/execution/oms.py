@@ -76,7 +76,8 @@ class OMS:
         p = Position(id=pid, strategy=plan.strategy, underlying=plan.underlying, product=plan.product, side=plan.side,
                      target_qty=plan.qty, entry_plan=plan.entry, stop=plan.stop, target=plan.target, initial_stop=plan.stop,
                      legs=legs, reason=plan.reason, plan_summary=plan.summary(), charges_est=plan.charges_target,
-                     slippage=plan.slippage, capital=plan.capital, signal_ms=plan.meta.get("signal_ms"))
+                     slippage=plan.slippage, capital=plan.capital, signal_ms=plan.meta.get("signal_ms"),
+                     exit_rules=dict(plan.meta.get("exit") or {}))
         self.positions[pid] = p
         if p.is_combo:
             for i, (l, lg) in enumerate(zip(legs, plan.meta["legs"])):
@@ -266,16 +267,22 @@ class OMS:
                 await self.exit(p, f"intraday square-off {s.square_off_intraday_at:%H:%M}")
                 continue
             # partial booking at the milestone, then move the stop to at least break-even
-            if not p.partial_done and r_now >= s.partial_book_r:
+            if not p.partial_done and r_now >= p.exit_rules.get("partial_book_r", s.partial_book_r):
                 p.partial_done = True
                 await self.exit(p, f"partial profit at {r_now:.1f}R", fraction=s.partial_book_fraction)
                 be = p.entry_price + d * (p.charges_est / max(1, p.target_qty))
                 p.stop = max(p.stop, be) if d > 0 else min(p.stop, be)
+            # time stop (fast strategies): a momentum trade that has not moved our way in N minutes is closed
+            xr = p.exit_rules
+            if xr.get("time_stop_min") and time.time() - p.opened_at >= xr["time_stop_min"] * 60 \
+                    and r_now < xr.get("time_stop_min_r", 0.25) and not p.partial_done:
+                await self.exit(p, f"time stop: no follow-through in {xr['time_stop_min']} min ({r_now:+.2f}R)")
+                continue
             # trailing stop: only ever tightens
-            if r_now >= s.trail_start_r:
+            if r_now >= xr.get("trail_start_r", s.trail_start_r):
                 p.trailing = True
             if p.trailing:
-                trail = p.best - d * s.trail_gap_r * risk
+                trail = p.best - d * xr.get("trail_gap_r", s.trail_gap_r) * risk
                 p.stop = max(p.stop, trail) if d > 0 else min(p.stop, trail)
             # fixed target applies only until the partial is booked; the rest rides the trailing stop
             if not p.partial_done and (m - p.target) * d >= 0:

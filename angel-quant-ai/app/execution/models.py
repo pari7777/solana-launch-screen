@@ -95,6 +95,7 @@ class Position:
     slippage: float = 0.0
     capital: float = 0.0
     signal_ms: float | None = None
+    exit_rules: dict = field(default_factory=dict)   # per-strategy overrides: trail_start_r, trail_gap_r, time_stop_min …
 
     @property
     def is_combo(self) -> bool:
