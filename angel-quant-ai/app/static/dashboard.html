@@ -46,6 +46,9 @@ a{color:var(--b)}
 .dd .sc{border-radius:6px;text-align:center;font-weight:600;font-size:12px;padding:1px 0;align-self:start;background:var(--chip)}
 .dd .ans{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:12px;min-height:80px;margin-top:8px;font-size:13px}
 .dd input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);flex:1 1 240px}
+.dd .star{display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:99px;background:var(--chip);color:var(--a);margin-left:4px}
+.dd .k3{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));margin-bottom:12px}
+.dd .k3>div{background:var(--bg);border-radius:8px;padding:10px 12px}.dd .k3 b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
 .dd .cue{border-left:4px solid var(--a);padding:8px 12px;border-radius:6px;background:var(--bg)}
 [hidden]{display:none!important}
 </style></head><body>
@@ -98,6 +101,7 @@ document.getElementById('bcopy').onclick=async()=>{try{await navigator.clipboard
 <div class="card"><h2>Investor sentiment by region</h2><div class="bars" id="dMood"></div><h2 style="margin-top:16px">Intermarket push right now</h2><div class="bars" id="dLinks"></div></div></div>
 <div class="two"><div class="card"><h2>Self-grading — daily hit rate</h2><div class="bars rel" id="dDaily"></div><h2 style="margin-top:16px">Which signals are earning trust</h2><div class="bars rel" id="dFeat"></div></div>
 <div class="card"><h2>Latest graded calls</h2><div class="tw" id="dGraded"></div><h2 style="margin-top:16px">Accuracy by market type</h2><div class="tw" id="dCls"></div></div></div>
+<div class="card"><h2>Getting smarter day by day</h2><div id="dSmart"></div></div>
 <div class="card"><h2>Ask Claude about the world scan</h2><div class="btns" id="dQ"><button data-q="Explain today's world outlook and what it means for Indian mid and small caps intraday.">Outlook for India today</button><button data-q="Give bull, base and bear cases for the next 1-5 days across world equities, India, gold, oil and crypto, with rough odds.">Bull / base / bear</button><button data-q="What specific events or levels would flip the brain's current view?">What flips the view</button></div>
 <form class="btns" id="dAsk" style="margin-top:8px"><input id="dIn" placeholder="Your question about this scan" aria-label="Question"><button>Ask</button></form><div class="ans" id="dAns">Answers appear here.</div></div>
 <div class="card"><h2>Scan log</h2><div class="ev" id="dLog"></div><div class="sm mut" style="margin-top:8px">Prices: Yahoo Finance daily data · Fear &amp; Greed: alternative.me · Headlines: Google News. Odds are statistical estimates, display only — the bot does not trade on them. Not investment advice.</div></div>
@@ -189,7 +193,7 @@ function dRender(){const W=DW,P=W.pred||{},it=P.items||{},S=W.snap||{},pr=S.pric
  let h='';G.forEach(gr=>{if(dF!=='All'&&dF!==gr)return;const L=W.universe.filter(a=>a.group===gr);h+=`<div class="grp">${gr}</div>`;
   L.forEach(a=>{const f=it[a.id],q=pr[a.id]||{};if(!f)return;const up=f.p>=.5,off=(f.p-.5)*100;
    h+=`<button class="cell" data-id="${a.id}" aria-expanded="${dOpen===a.id}"><div class="t"><span>${esc(a.name)}</span><span class="${q.chg>0?'pos':q.chg<0?'neg':''}">${q.chg==null?'':(q.chg>0?'▲ ':'▼ ')+pc(q.chg)}</span></div><div class="px">${nf(q.last)}${a.id==='US10Y'?'%':''}</div>${(()=>{const pv=pval(a.id,q.last,f.exp,a.s);return pv?`<div class="pv" title="Brain's expected value 24 h after the scan; range = a typical day either side">24 h view <b class="${up?'pos':'neg'}">→ ${nf(pv.v)}${a.id==='US10Y'?'%':''}</b><span>range ${nf(pv.lo)}–${nf(pv.hi)}</span></div>`:''})()}
-    <div class="o"><b class="${up?'pos':'neg'}">${up?'▲':'▼'} ${Math.round((up?f.p:1-f.p)*100)}%</b><span class="sm mut">${up?'odds up':'odds down'} · ${f.exp>0?'+':''}${f.exp}%</span></div>
+    <div class="o"><b class="${up?'pos':'neg'}">${up?'▲':'▼'} ${Math.round((up?f.p:1-f.p)*100)}%${strong(f.p,M)?'<span class="star" title="The brain\'s calls this confident have been right often enough to trust more">★ strong</span>':''}</b><span class="sm mut">${up?'odds up':'odds down'} · ${f.exp>0?'+':''}${f.exp}%</span></div>
     <div class="m"><i style="left:${off>=0?50:50+off}%;width:${Math.abs(off)}%;background:${up?UC:DC}"></i></div>${dSpark(W.hist[a.id])}</button>`;
    if(dOpen===a.id)h+=dDetail(a,f,S,W);});
   const pend=L.filter(a=>!it[a.id]).map(a=>a.name);if(pend.length)h+=`<div class="pend">No data this scan: ${esc(pend.join(', '))}</div>`;});
@@ -209,8 +213,26 @@ function dRender(){const W=DW,P=W.pred||{},it=P.items||{},S=W.snap||{},pr=S.pric
  const CN={eq:'Stock indices',fx:'Currencies',rate:'Bond yields',vol:'Volatility',cmd:'Commodities',crypto:'Crypto'},CS=M.classStats||{};
  $('dCls').innerHTML=`<table><thead><tr><th>Type</th><th>Graded</th><th>Hit rate</th></tr></thead><tbody>${Object.keys(CN).map(c=>`<tr><td>${CN[c]}</td><td>${CS[c]?CS[c].n:0}</td><td>${CS[c]&&CS[c].n?Math.round(CS[c].hits/CS[c].n*100)+'%':'—'}</td></tr>`).join('')}</tbody></table>`;
  $('dLog').innerHTML=(W.log||[]).map(x=>`<div><span class="mut">${ist(x.at)}</span> ${esc(x.msg)}</div>`).join('')||'<span class="mut">No scans yet.</span>';
- $('dQ').hidden=$('dAsk').hidden=!W.claude;if(!W.claude)$('dAns').textContent='Claude is off on this bot. Add ANTHROPIC_API_KEY to ask questions about the world scan.';
+ dSmart(W);$('dQ').hidden=$('dAsk').hidden=!W.claude;if(!W.claude)$('dAns').textContent='Claude is off on this bot. Add ANTHROPIC_API_KEY to ask questions about the world scan.';
 }
+// a call counts as "strong" when it is 65%+ sure AND such calls have proven right ≥ 60% of the time over ≥ 50 grades
+function strong(p,M){const b=(M.buckets||{})['65%+'];return Math.abs(p-.5)>=.15&&b&&b.n>=50&&b.hits/b.n>=.6}
+function dSmart(W){const M=W.model||{},T=M.totals||{},days=Object.entries(M.daily||{}).filter(([,d])=>d.n).sort();
+ const win=a=>{const n=a.reduce((s,[,d])=>s+d.n,0),h=a.reduce((s,[,d])=>s+d.hits,0);return n?{r:h/n,n}:null};
+ const now7=win(days.slice(-7)),prev7=win(days.slice(-14,-7)),B=M.baselines||{},pct0=x=>x==null?'—':Math.round(x*100)+'%';
+ const br=T.n?T.hits/T.n:null,up=B.alwaysUp&&B.alwaysUp.n?B.alwaysUp.hits/B.alwaysUp.n:null,mo=B.momentum&&B.momentum.n?B.momentum.hits/B.momentum.n:null;
+ const trend=now7&&prev7?now7.r-prev7.r:null;
+ const top=(M.buckets||{})['65%+'];
+ let h=`<div class="k3"><div><span class="sm mut">Last 7 days</span><b>${now7?pct0(now7.r):'—'}</b><span class="sm ${trend>0?'pos':trend<0?'neg':'mut'}">${trend==null?'needs 2 weeks to show a trend':(trend>=0?'▲ ':'▼ ')+Math.abs(Math.round(trend*100))+' pts vs the week before'}</span></div>
+  <div><span class="sm mut">Brain vs simple rules</span><b>${pct0(br)}</b><span class="sm mut">"always up" ${pct0(up)} · "same as yesterday" ${pct0(mo)}</span></div>
+  <div><span class="sm mut">When 65%+ sure</span><b>${top&&top.n?pct0(top.hits/top.n):'—'}</b><span class="sm mut">${top&&top.n?top.n+' such calls graded':'no confident calls graded yet'}</span></div>
+  <div><span class="sm mut">Odds calibration</span><b>${(M.calib||{}).n>=W.calibMin?'On':'Learning'}</b><span class="sm mut">${(M.calib||{}).n>=W.calibMin?'shown odds are corrected to match real hit rates':'starts after '+W.calibMin+' graded calls ('+((M.calib||{}).n||0)+' so far)'}</span></div></div>`;
+ const BK=Object.entries(M.buckets||{});
+ h+=`<div class="two"><div><b class="sm">Accuracy by how sure the brain was</b><div class="bars rel">${BK.map(([k,b])=>{const r=b.n?b.hits/b.n:null;return `<div class="r"><span>${k} sure</span><div class="tr"><i style="left:0;width:${(r||0)*100}%;background:${r!=null&&r>=.5?UC:DC}"></i></div><span class="v">${r==null?'—':Math.round(r*100)+'%'} · ${b.n}</span></div>`}).join('')}</div><div class="sm mut">If confident calls hit more often than unsure ones, the odds are meaningful. ★ marks markets where that is proven.</div></div>
+ <div><b class="sm">Model league — ${W.league.length} versions compete, the most accurate leads</b><div class="tw"><table><thead><tr><th>Version</th><th>Graded</th><th>Hit rate</th><th>Recent error</th></tr></thead><tbody>${W.league.map(r=>`<tr><td>${r.leader?'<b>★ '+esc(r.label)+'</b>':esc(r.label)}</td><td>${r.n}</td><td>${r.hitRate==null?'—':Math.round(r.hitRate*100)+'%'}</td><td>${r.error.toFixed(3)}</td></tr>`).join('')}</tbody></table></div><div class="sm mut">Recent error = average squared miss over about the last 100 calls (lower is better; 0.25 = coin flip). A version needs ${W.leadMin} graded calls to lead.</div></div></div>`;
+ h+=(M.log||[]).length?`<div class="sm" style="margin-top:8px"><b>League changes:</b> ${(M.log||[]).slice(0,3).map(esc).join(' · ')}</div>`:'';
+ h+='<div class="sm mut" style="margin-top:8px">How it improves: every hour it grades the forecasts from 24 h earlier; each version shifts weight toward the signals that were right and learns each market\'s own lean; learning slows as evidence builds so one odd day can\'t undo weeks of lessons. Realistic target: 55–60% overall and higher on ★ strong calls. No model reaches certainty in markets.</div>';
+ $('dSmart').innerHTML=h}
 function dSpark(v){if(!v||v.length<2)return '';const mn=Math.min(...v),mx=Math.max(...v);const d=v.map((x,i)=>`${(i/(v.length-1)*100).toFixed(1)},${(20-(mx===mn?10:(x-mn)/(mx-mn)*20)).toFixed(1)}`).join(' ');
  return `<svg viewBox="0 0 100 20" preserveAspectRatio="none" style="width:100%;height:20px;margin-top:6px" aria-hidden="true"><polyline points="${d}" fill="none" stroke="${v[v.length-1]>=v[0]?UC:DC}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`}
 function dDetail(a,f,S,W){const bars=W.feats.map((k,i)=>{const v=f.contrib[i];return `<div class="r"><span>${esc(W.featNames[k])}</span>${mbar(Math.max(-1,Math.min(1,v)))}<span class="v ${v>0?'pos':v<0?'neg':''}">${v>0?'+':''}${v.toFixed(2)}</span></div>`}).join('');

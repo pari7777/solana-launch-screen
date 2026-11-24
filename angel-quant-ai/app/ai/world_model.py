@@ -89,9 +89,66 @@ def z(snap: dict, i: str, s: float) -> float:
     return 0.0 if c is None else math.tanh(c / s)
 
 
+# Model league: every version forecasts every market on every scan, every version is graded, the most accurate leads.
+VARIANTS = {
+    "core": {"lr": 0.06, "mask": [1, 1, 1, 1, 1, 1, 1], "label": "Core brain"},
+    "fast": {"lr": 0.15, "mask": [1, 1, 1, 1, 1, 1, 1], "label": "Fast learner"},
+    "steady": {"lr": 0.02, "mask": [1, 1, 1, 1, 1, 1, 1], "label": "Steady learner"},
+    "trend": {"lr": 0.06, "mask": [1, 0, 1, 1, 1, 1, 0], "label": "Trend follower"},
+    "reversal": {"lr": 0.06, "mask": [0, 1, 1, 1, 1, 0, 1], "label": "Mean reversion"},
+}
+SAMPLE_W = 0.25          # hourly forecasts overlap (24 a day), so each graded one counts a quarter
+EMA_A = 0.01             # accuracy memory: about the last 100 graded calls per version
+MIN_LEAD_N = 200         # a version needs this many graded calls before it can take the lead
+CALIB_MIN_N = 100        # odds are re-calibrated only after this many graded calls
+BUCKETS = [("50–55%", 0.05), ("55–60%", 0.10), ("60–65%", 0.15), ("65%+", 1.0)]
+
+
+def _variant(weights: dict) -> dict:
+    return {"weights": copy.deepcopy(weights), "assetBias": {}, "n": 0, "hits": 0, "ema": 0.25}
+
+
+def migrate(model: dict | None) -> dict:
+    """Bring a saved model (v1 or v2) up to v2; v1 weights seed every league version, so nothing learned is lost."""
+    if not model:
+        model = {"version": 1, "lr": 0.06, "weights": copy.deepcopy(W0), "featHits": {f: {"n": 0, "h": 0} for f in FEATS},
+                 "totals": {"n": 0, "hits": 0, "brier": 0}, "daily": {}, "classStats": {}, "updatedAt": None}
+    if not model.get("variants"):
+        model["variants"] = {k: _variant(model.get("weights") or W0) for k in VARIANTS}
+    for k in VARIANTS:
+        model["variants"].setdefault(k, _variant(W0))
+    model.setdefault("champion", "core")
+    model.setdefault("calib", {"a": 1.0, "b": 0.0, "n": 0})
+    model.setdefault("buckets", {b: {"n": 0, "hits": 0} for b, _ in BUCKETS})
+    model.setdefault("baselines", {"momentum": {"n": 0, "hits": 0}, "alwaysUp": {"n": 0, "hits": 0}})
+    model.setdefault("log", [])
+    model["version"] = 2
+    model["weights"] = model["variants"][model["champion"]]["weights"]      # what the dashboard shows
+    return model
+
+
 def fresh_model() -> dict:
-    return {"version": 1, "lr": 0.06, "weights": copy.deepcopy(W0), "featHits": {f: {"n": 0, "h": 0} for f in FEATS},
-            "totals": {"n": 0, "hits": 0, "brier": 0}, "daily": {}, "classStats": {}, "updatedAt": None}
+    return migrate(None)
+
+
+def _logit(p: float) -> float:
+    p = clip(p, 1e-4, 1 - 1e-4)
+    return math.log(p / (1 - p))
+
+
+def calibrate(model: dict, p: float) -> float:
+    c = model.get("calib") or {}
+    if c.get("n", 0) < CALIB_MIN_N:
+        return p
+    return sig(c["a"] * _logit(p) + c["b"])
+
+
+def bucket(p: float) -> str:
+    d = abs(p - 0.5)
+    for name, top in BUCKETS:
+        if d < top:
+            return name
+    return BUCKETS[-1][0]
 
 
 def risk_mood(snap: dict) -> float:
@@ -187,25 +244,37 @@ def _r(v: float, n: int = 3) -> float:
     return round(v + 0.0, n)
 
 
+def _raw(model: dict, name: str, a: dict, f: list[float]) -> tuple[float, list[float]]:
+    v, mask = model["variants"][name], VARIANTS[name]["mask"]
+    w = v["weights"][a["cls"]]
+    contrib = [w[i + 1] * f[i] * mask[i] for i in range(len(f))]
+    x = w[0] + sum(contrib) + v["assetBias"].get(a["id"], 0.0)
+    return clip(sig(x), 0.03, 0.97), contrib
+
+
 def predict(snap: dict, model: dict | None = None) -> dict:
-    model = model or fresh_model()
+    model = migrate(model)
+    champ = model["champion"]
     out = {}
     for a in U:
         if last(snap, a["id"]) is None:
             continue
         f = features(snap, a)
-        w = model["weights"][a["cls"]]
-        x = w[0] + sum(w[i + 1] * f[i] for i in range(len(f)))
-        p = clip(sig(x), 0.03, 0.97)
-        contrib = [_r(w[i + 1] * v) for i, v in enumerate(f)]
+        praw, contrib = _raw(model, champ, a, f)
+        pv = {k: _r(_raw(model, k, a, f)[0]) for k in VARIANTS}
+        p = clip(calibrate(model, praw), 0.03, 0.97)
+        contrib = [_r(c) for c in contrib]
         top = max(range(len(contrib)), key=lambda i: (abs(contrib[i]), -i))
-        out[a["id"]] = {"p": _r(p), "ref": last(snap, a["id"]), "exp": round((p - 0.5) * 2 * a["s"], 2), "band": a["s"],
+        c0 = chg(snap, a["id"])
+        out[a["id"]] = {"p": _r(p), "praw": _r(praw), "pv": pv, "c0": (1 if c0 > 0 else -1 if c0 < 0 else 0) if c0 is not None else 0,
+                        "ref": last(snap, a["id"]), "exp": round((p - 0.5) * 2 * a["s"], 2), "band": a["s"],
                         "f": [_r(v) for v in f], "contrib": contrib, "top": FEATS[top]}
-    return {"at": snap.get("at"), "horizonH": 24, "mood": _r(risk_mood(snap)), "items": out, "modelVersion": model.get("version", 1)}
+    return {"at": snap.get("at"), "horizonH": 24, "mood": _r(risk_mood(snap)), "items": out, "modelVersion": 2, "champion": champ}
 
 
 def score_and_learn(pred: dict, later: dict, model: dict) -> dict:
-    items, n, hits, brier, lr = {}, 0, 0, 0.0, model["lr"]
+    model = migrate(model)
+    items, n, hits, brier = {}, 0, 0, 0.0
     for i, it in (pred.get("items") or {}).items():
         now_p, a = last(later, i), BY_ID.get(i)
         if now_p is None or not a or it.get("ref") is None or now_p == it["ref"]:
@@ -216,14 +285,51 @@ def score_and_learn(pred: dict, later: dict, model: dict) -> dict:
         n += 1
         hits += hit
         brier += (p - y) ** 2
-        w, g = model["weights"][a["cls"]], y - p
-        w[0] += lr * g * 0.5
-        for k, v in enumerate(it["f"]):
-            w[k + 1] = clip(w[k + 1] + lr * g * v, -2.5, 2.5)
-            if abs(v) > 0.05:
+        # how the shown odds did: by confidence, and against two simple rules
+        b = model["buckets"].setdefault(bucket(p), {"n": 0, "hits": 0})
+        b["n"] += 1
+        b["hits"] += hit
+        c0 = it.get("c0", 0)
+        if c0:
+            bm = model["baselines"]["momentum"]
+            bm["n"] += 1
+            bm["hits"] += 1 if (1 if c0 > 0 else 0) == y else 0
+        bu = model["baselines"]["alwaysUp"]
+        bu["n"] += 1
+        bu["hits"] += y
+        # every league version learns from its own forecast
+        pv = it.get("pv") or {"core": it.get("praw", p)}
+        for name, vp in pv.items():
+            if name not in VARIANTS:
+                continue
+            v, mask = model["variants"][name], VARIANTS[name]["mask"]
+            lr = VARIANTS[name]["lr"] * SAMPLE_W / (1 + v["n"] / 3000)       # learn slower as evidence grows
+            if not it.get("pv"):
+                lr = model.get("lr", 0.06)                                    # v1 forecast: learn exactly as v1 did
+            g = y - vp
+            w = v["weights"][a["cls"]]
+            w[0] += lr * g * 0.5
+            for k, fv in enumerate(it["f"]):
+                if mask[k]:
+                    w[k + 1] = clip(w[k + 1] + lr * g * fv, -2.5, 2.5)
+            if it.get("pv"):
+                v["assetBias"][i] = round(clip(v["assetBias"].get(i, 0.0) + lr * g * 0.5, -1, 1), 5)
+            v["n"] += 1
+            v["hits"] += 1 if (1 if vp >= 0.5 else 0) == y else 0
+            v["ema"] = round(v["ema"] * (1 - EMA_A) + EMA_A * (vp - y) ** 2, 6)
+        # odds calibration (online Platt scaling on the leading version's raw odds)
+        if it.get("praw") is not None:
+            c = model["calib"]
+            L = _logit(it["praw"])
+            gc = y - sig(c["a"] * L + c["b"])
+            c["a"] = round(clip(c["a"] + 0.01 * SAMPLE_W * gc * L, 0.3, 3), 5)
+            c["b"] = round(clip(c["b"] + 0.01 * SAMPLE_W * gc, -1, 1), 5)
+            c["n"] += 1
+        for k, fv in enumerate(it["f"]):
+            if abs(fv) > 0.05:
                 fh = model["featHits"][FEATS[k]]
                 fh["n"] += 1
-                fh["h"] += 1 if (1 if v > 0 else 0) == y else 0
+                fh["h"] += 1 if (1 if fv > 0 else 0) == y else 0
         cs = model["classStats"].setdefault(a["cls"], {"n": 0, "hits": 0})
         cs["n"] += 1
         cs["hits"] += hit
@@ -237,7 +343,29 @@ def score_and_learn(pred: dict, later: dict, model: dict) -> dict:
     model["totals"]["hits"] += hits
     model["totals"]["brier"] += brier
     model["updatedAt"] = later.get("at")
+    _pick_champion(model, day)
     return {"at": later.get("at"), "predAt": pred.get("at"), "n": n, "hits": hits, "brier": round(brier / n, 3) if n else None, "items": items}
+
+
+def _pick_champion(model: dict, day: str) -> None:
+    """The version with the lowest recent error leads, once it has enough graded calls and is clearly better."""
+    cur = model["champion"]
+    ready = {k: v for k, v in model["variants"].items() if v["n"] >= MIN_LEAD_N}
+    if not ready:
+        return
+    best = min(ready, key=lambda k: ready[k]["ema"])
+    if best != cur and ready[best]["ema"] < model["variants"][cur]["ema"] - 0.002:
+        model["champion"] = best
+        model["log"] = ([f"{day}: {VARIANTS[best]['label']} took the lead from {VARIANTS[cur]['label']} "
+                         f"(recent error {ready[best]['ema']:.3f} vs {model['variants'][cur]['ema']:.3f})"] + model["log"])[:20]
+    model["weights"] = model["variants"][model["champion"]]["weights"]
+
+
+def league(model: dict) -> list[dict]:
+    model = migrate(model)
+    return sorted(({"id": k, "label": VARIANTS[k]["label"], "n": v["n"], "hitRate": round(v["hits"] / v["n"], 3) if v["n"] else None,
+                    "error": v["ema"], "leader": k == model["champion"]} for k, v in model["variants"].items()),
+                  key=lambda r: (r["n"] < MIN_LEAD_N, r["error"]))
 
 
 def _hours(a: str, b: str) -> float:
@@ -246,7 +374,7 @@ def _hours(a: str, b: str) -> float:
 
 def step(snapshot: dict, model: dict | None, pending: list[dict]) -> dict:
     """One scan: grade forecasts that are 23–30 h old (older ones are retired), learn, then forecast from this scan."""
-    model = model or fresh_model()
+    model = migrate(model)
     scores, done = [], []
     for pr in pending or []:
         h = _hours(pr["at"], snapshot["at"])

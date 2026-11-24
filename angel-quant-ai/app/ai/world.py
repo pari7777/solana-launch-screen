@@ -226,7 +226,8 @@ class WorldBrain:
         pred = st.get("pred") or {}
         data = {"scan": st.get("snap"), "odds": {k: {"name": W.BY_ID[k]["name"], "pUp": v["p"], "expMove": v["exp"], "topDriver": W.FEAT_NAMES[v["top"]]}
                                                  for k, v in (pred.get("items") or {}).items()},
-                "riskMood": pred.get("mood"), "trackRecord": (st.get("model") or {}).get("totals")}
+                "riskMood": pred.get("mood"), "trackRecord": (st.get("model") or {}).get("totals"),
+                "confidenceAccuracy": (st.get("model") or {}).get("buckets"), "league": W.league(st.get("model"))}
         sys = ("You are the reasoning layer of a world-market dashboard attached to an Indian intraday paper-trading bot. Use ONLY the "
                "JSON given. Reason like a senior macro strategist: intermarket links, sentiment extremes, event risk. Give probabilities, "
                "not certainties, and say where the model may be wrong. Analysis only, not investment advice; never tell the reader to "
@@ -238,9 +239,11 @@ class WorldBrain:
 
     def snapshot(self) -> dict:
         st = self.state
-        m = st.get("model") or W.fresh_model()
+        m = W.migrate(st.get("model"))
         return {"universe": [{k: a[k] for k in ("id", "name", "cls", "group", "themes", "s", "beta")} for a in W.U],
                 "feats": W.FEATS, "featNames": W.FEAT_NAMES, "snap": st.get("snap"), "pred": st.get("pred"), "hist": st.get("hist") or {},
-                "model": {k: m.get(k) for k in ("weights", "featHits", "totals", "daily", "classStats", "updatedAt")},
+                "model": {k: m.get(k) for k in ("weights", "featHits", "totals", "daily", "classStats", "updatedAt", "buckets", "baselines",
+                                                "calib", "champion", "log")},
+                "league": W.league(m), "calibMin": W.CALIB_MIN_N, "leadMin": W.MIN_LEAD_N,
                 "scores": (st.get("scores") or [])[:3], "log": (st.get("log") or [])[:8], "error": self.error, "running": self.running,
                 "every_min": self.e.s.world_every_min, "claude": self.e.claude.enabled}

@@ -121,3 +121,53 @@ def test_too_few_prices_skips_forecast(monkeypatch):
     monkeypatch.setattr(wb, "scan", fake_scan)
     asyncio.run(wb.run_once())
     assert "forecast skipped" in wb.error and wb.state["pred"] is None
+
+
+def _simulate(days=20, edge=0.7, seed=1):
+    """A made-up world where news pushes prices the OPPOSITE way to the brain's starting belief; it must learn that."""
+    import random
+    from datetime import datetime, timedelta, timezone
+    rnd, model, pending = random.Random(seed), None, []
+    prices = {a["id"]: 100.0 for a in W.U}
+    t0 = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    themes = sorted({t for a in W.U for t in a["themes"]})
+    news = None
+    for h in range(days * 24):
+        at = (t0 + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if h % 72 == 0:
+            news = {t: rnd.uniform(-1, 1) for t in themes}
+        for a in W.U:
+            s = sum(news[t] for t in a["themes"]) / len(a["themes"])
+            d = (1 if s < 0 else -1) if rnd.random() < edge else (1 if rnd.random() < 0.5 else -1)
+            prices[a["id"]] *= 1 + d * 0.0006 * (1 + rnd.random())
+        snap = {"at": at, "prices": {k: {"last": round(v, 4), "chg": 0.0} for k, v in prices.items()},
+                "news": [{"h": "x", "impact": 2, "effects": news}], "sentiment": {}}
+        r = W.step(snap, model, pending)
+        model = r["model"]
+        pending = [p for p in pending if p["at"] not in set(r["scoredAts"])] + [r["prediction"]]
+    return model
+
+
+def test_learns_day_by_day_toward_higher_accuracy():
+    m = _simulate()
+    rates = [m["daily"][d]["hits"] / m["daily"][d]["n"] for d in sorted(m["daily"]) if m["daily"][d]["n"]]
+    first, late = sum(rates[:2]) / 2, sum(rates[-8:]) / 8
+    assert first < 0.4 and late > 0.6, rates                 # starts wrong-footed, ends clearly better than a coin flip
+    assert m["weights"]["eq"][3] < 0                          # it learned that news works backwards in this world
+    top = m["buckets"]["65%+"]
+    assert top["hits"] / top["n"] > late - 0.05               # confident calls are at least as good as average
+    assert sum(b["n"] for b in m["buckets"].values()) == m["totals"]["n"]
+    assert m["calib"]["n"] == m["totals"]["n"] and m["log"]   # odds were re-calibrated; the league changed leader at least once
+    lg = W.league(m)
+    assert lg[0]["leader"] or any(r["leader"] for r in lg) and len(lg) == 5
+
+
+def test_v1_model_migrates_without_losing_learning():
+    v1 = W.fresh_model()
+    v1 = {k: v1[k] for k in ("lr", "featHits", "totals", "daily", "classStats", "updatedAt")} | {"version": 1, "weights": copy.deepcopy(W.W0)}
+    v1["weights"]["eq"][3] = 1.7
+    v1["totals"] = {"n": 40, "hits": 25, "brier": 9}
+    m = W.migrate(v1)
+    assert m["version"] == 2 and m["champion"] == "core" and set(m["variants"]) == set(W.VARIANTS)
+    assert all(v["weights"]["eq"][3] == 1.7 for v in m["variants"].values()) and m["totals"]["n"] == 40
+    assert W.predict(SNAP, m)["items"]["SPX"]["pv"]["core"] == W.predict(SNAP, m)["items"]["SPX"]["praw"]
