@@ -79,6 +79,29 @@ def build_app(engine: Engine, password: str) -> FastAPI:
     async def exit_pos(pid: int):
         return {"msg": await engine.exit_position(pid)}
 
+    @app.get("/api/world", dependencies=[Depends(auth)])
+    async def world():
+        return JSONResponse(engine.world.snapshot())
+
+    @app.post("/api/world/scan", dependencies=[Depends(auth), Depends(same_origin)])
+    async def world_scan():
+        if engine.world.running:
+            return {"msg": "A world scan is already running."}
+        if time.time() - engine.world.last_run < 120:
+            return {"msg": "Scanned less than 2 minutes ago — try again shortly."}
+        asyncio.create_task(engine.world.run_once())
+        return {"msg": "World scan started — about a minute."}
+
+    @app.post("/api/world/ask", dependencies=[Depends(auth), Depends(same_origin)])
+    async def world_ask(req: Request):
+        try:
+            q = str((await req.json()).get("q", "")).strip()
+        except Exception:  # noqa: BLE001
+            q = ""
+        if not q:
+            raise HTTPException(400, "empty question")
+        return {"answer": await engine.world.ask(q)}
+
     @app.get("/api/test-report", dependencies=[Depends(auth)])
     async def test_report():
         """30-day paper test report card: net after charges, profit factor, win rate, worst day."""

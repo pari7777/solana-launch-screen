@@ -24,15 +24,39 @@ th{color:var(--mut);font-weight:550;font-size:12px}.tw{overflow-x:auto}td.wrap{w
 .banner{padding:10px 14px;border-radius:10px;border:1px solid var(--a);color:var(--a);background:transparent}
 .ev{font-family:ui-monospace,Menlo,monospace;font-size:12px;max-height:260px;overflow:auto}
 a{color:var(--b)}
+.tabs{display:flex;gap:6px;margin-top:8px}.tabs button[aria-selected=true]{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.dd .hl{font-size:22px;font-weight:650;line-height:1.2;margin:0}
+.dd .board{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr))}
+.dd .cell{text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);width:100%;display:block}
+.dd .cell[aria-expanded=true]{border-color:var(--ink)}
+.dd .cell .t{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--mut)}
+.dd .cell .px{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+.dd .cell .o{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 8px;margin-top:4px}
+.dd .cell .o b{font-size:21px;font-variant-numeric:tabular-nums}
+.dd .m{position:relative;height:7px;border-radius:4px;background:var(--chip);margin-top:6px;overflow:hidden}
+.dd .m i{position:absolute;top:0;bottom:0;border-radius:4px}.dd .m:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--card)}
+.dd .grp{grid-column:1/-1;font-size:12px;font-weight:600;color:var(--mut);margin-top:8px}.dd .pend{grid-column:1/-1;font-size:12px;color:var(--mut)}
+.dd .det{grid-column:1/-1;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--card)}
+.dd .bars .r{display:grid;grid-template-columns:10.5em minmax(0,1fr) 4.5em;gap:8px;align-items:center;margin:4px 0;font-size:13px}
+.dd .bars .tr{position:relative;height:10px}.dd .bars .tr:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--mut);opacity:.5}
+.dd .bars .tr i{position:absolute;top:0;height:10px;border-radius:3px}.dd .bars .v{text-align:right;font-variant-numeric:tabular-nums}
+.dd .bars.rel .tr{background:var(--chip);border-radius:3px}.dd .bars.rel .tr:before{display:none}.dd .bars.rel .r{grid-template-columns:10.5em minmax(0,1fr) 7em}
+.dd ul.news{list-style:none;margin:0;padding:0}.dd ul.news li{display:grid;grid-template-columns:3.2em minmax(0,1fr);gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.dd .sc{border-radius:6px;text-align:center;font-weight:600;font-size:12px;padding:1px 0;align-self:start;background:var(--chip)}
+.dd .ans{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:12px;min-height:80px;margin-top:8px;font-size:13px}
+.dd input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);flex:1 1 240px}
+.dd .cue{border-left:4px solid var(--a);padding:8px 12px;border-radius:6px;background:var(--bg)}
+[hidden]{display:none!important}
 </style></head><body>
-<header><div><h1>Angel Quant AI</h1><div class="sm mut" id="sub">connecting…</div></div>
-<div class="btns">
+<header><div><h1>Angel Quant AI</h1><div class="sm mut" id="sub">connecting…</div>
+<div class="tabs" role="tablist"><button role="tab" id="tb-bot" aria-selected="true" onclick="tab('bot')">Bot</button><button role="tab" id="tb-deep" aria-selected="false" onclick="tab('deep')">Deep Dive · world brain</button></div></div>
+<div class="btns" id="botbtns">
 <button onclick="ctl('start')">Start bot</button><button onclick="ctl('pause')">Pause new entries</button>
 <button onclick="ctl('resume')">Resume bot</button><button onclick="ctl('disable_all')">Disable all strategies</button>
 <button onclick="ctl('enable_all')">Enable all</button>
 <button class="danger" onclick="if(confirm('Square off ALL positions now and block new entries?'))ctl('emergency')">Emergency square-off</button>
 </div></header>
-<div class="wrap">
+<div class="wrap" id="tab-bot">
 <div id="blk"></div>
 <div class="grid">
 <div class="card kpi"><div class="s">Equity</div><div class="v" id="eq">—</div><div class="s" id="cap"></div></div>
@@ -62,6 +86,20 @@ document.getElementById('bcopy').onclick=async()=>{try{await navigator.clipboard
 <div class="card"><h2>Closed trades — gross → charges → net</h2><div class="tw"><table><thead><tr><th>#</th><th>Strategy</th><th>Instrument</th><th>Gross</th><th>Charges</th><th>Net</th><th>Exit reason</th></tr></thead><tbody id="cl"></tbody></table></div>
 <div class="sm" style="margin-top:8px">Reports: <a href="/api/report/trades?fmt=csv&days=1">today CSV</a> · <a href="/api/report/full?fmt=xlsx&days=1">today Excel</a> · <a href="/api/report/strategy?fmt=xlsx&days=7">weekly</a> · <a href="/api/report/monthly?fmt=xlsx&days=31">monthly</a> · <a href="/api/report/charges?fmt=csv&days=31">charges</a></div></div>
 <div class="card"><h2>Events</h2><div class="ev" id="ev"></div></div>
+</div>
+<div class="wrap dd" id="tab-deep" hidden>
+<div class="card"><div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center"><div class="sm mut" id="dStat">loading the world brain…</div><button id="dScan" class="small">Scan now</button></div>
+<p class="hl" id="dHl" style="margin-top:8px">—</p><div class="sm mut" id="dSub"></div></div>
+<div class="grid" id="dKpi"></div>
+<div class="card"><h2>What the world means for the bot today</h2><div id="dBot"></div></div>
+<div class="card"><h2>World forecast board — odds of higher in 24 h</h2><div class="btns" id="dFil" style="margin-bottom:8px"></div><div class="board" id="dBoard"></div><div class="sm mut" style="margin-top:8px">Tap a market to see why. The % after the odds is the expected 24 h move.</div></div>
+<div class="two"><div class="card"><h2>World headlines the brain weighed</h2><ul class="news" id="dNews"></ul></div>
+<div class="card"><h2>Investor sentiment by region</h2><div class="bars" id="dMood"></div><h2 style="margin-top:16px">Intermarket push right now</h2><div class="bars" id="dLinks"></div></div></div>
+<div class="two"><div class="card"><h2>Self-grading — daily hit rate</h2><div class="bars rel" id="dDaily"></div><h2 style="margin-top:16px">Which signals are earning trust</h2><div class="bars rel" id="dFeat"></div></div>
+<div class="card"><h2>Latest graded calls</h2><div class="tw" id="dGraded"></div><h2 style="margin-top:16px">Accuracy by market type</h2><div class="tw" id="dCls"></div></div></div>
+<div class="card"><h2>Ask Claude about the world scan</h2><div class="btns" id="dQ"><button data-q="Explain today's world outlook and what it means for Indian mid and small caps intraday.">Outlook for India today</button><button data-q="Give bull, base and bear cases for the next 1-5 days across world equities, India, gold, oil and crypto, with rough odds.">Bull / base / bear</button><button data-q="What specific events or levels would flip the brain's current view?">What flips the view</button></div>
+<form class="btns" id="dAsk" style="margin-top:8px"><input id="dIn" placeholder="Your question about this scan" aria-label="Question"><button>Ask</button></form><div class="ans" id="dAns">Answers appear here.</div></div>
+<div class="card"><h2>Scan log</h2><div class="ev" id="dLog"></div><div class="sm mut" style="margin-top:8px">Prices: Yahoo Finance daily data · Fear &amp; Greed: alternative.me · Headlines: Google News. Odds are statistical estimates, display only — the bot does not trade on them. Not investment advice.</div></div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
@@ -113,6 +151,75 @@ $('tc').innerHTML=`<div class="s">Day ${t.day} of ${t.days} · ${t.start} → ${
 <tr><td>${t.trades}</td><td>${R(t.gross)}</td><td>${R(t.charges)}</td><td><b style="color:${t.net>=0?'#15803d':'#b91c1c'}">${R(t.net)}</b></td><td>${t.win_rate??'—'}%</td><td>${t.profit_factor??'—'}</td><td>${R(t.avg_win)} / ${R(t.avg_loss)}</td><td>${R(t.best_day)} / ${R(t.worst_day)}</td></tr></table>
 <div class="s">${t.trades<20?'Too few trades yet to judge.':ok?'So far: positive after charges with profit factor ≥ 1.3.':'So far: not yet positive after charges (needs net > 0 and profit factor ≥ 1.3).'}</div>`}}catch(e){}setTimeout(tcard,60000)}
 tcard();
+/* ───────── Deep Dive (world brain) ───────── */
+let DW=null,dOpen=null,dF='All',dT=null;
+function tab(t){const deep=t==='deep';$('tab-bot').hidden=deep;$('tab-deep').hidden=!deep;$('botbtns').hidden=deep;
+ $('tb-bot').setAttribute('aria-selected',!deep);$('tb-deep').setAttribute('aria-selected',deep);history.replaceState(null,'',deep?'#deep':'#');if(deep)dLoad();}
+async function dLoad(){clearTimeout(dT);try{const r=await fetch('/api/world');if(r.ok){DW=await r.json();dRender();}}catch(e){$('dStat').textContent='world brain not reachable — retrying'}
+ if(!$('tab-deep').hidden)dT=setTimeout(dLoad,60000)}
+const pc=(v,d=2)=>v==null?'—':(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(d)+'%';
+const nf=v=>v==null?'—':Number(v).toLocaleString('en-IN',{maximumFractionDigits:Math.abs(v)>=1000?0:2});
+const ist=s=>{const d=new Date(s);return isNaN(d)?'—':d.toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})+' IST'};
+const UC='var(--g)',DC='var(--r)';
+function mbar(v){const w=Math.min(50,Math.abs(v||0)*50);return `<div class="tr"><i style="left:${v>=0?50:50-w}%;width:${w}%;background:${v>=0?UC:DC}"></i></div>`}
+function dRender(){const W=DW,P=W.pred||{},it=P.items||{},S=W.snap||{},pr=S.prices||{},M=W.model||{},U={};W.universe.forEach(a=>U[a.id]=a);
+ $('dStat').textContent=(S.at?`Last scan ${ist(S.at)} · every ${W.every_min} min · headlines read by ${S.reader||'—'}`:'First world scan runs within a few minutes of the bot starting')+(W.running?' · scanning now…':'')+(W.error?' · '+W.error:'');
+ const ids=Object.keys(it);
+ if(ids.length){const m=P.mood,tone=m>0.35?'Risk-on':m>0.1?'Leaning risk-on':m<-0.35?'Risk-off':m<-0.1?'Cautious':'Undecided';const lead=ids.slice().sort((a,b)=>Math.abs(it[b].p-.5)-Math.abs(it[a].p-.5))[0],lp=it[lead].p;
+  $('dHl').textContent=`${tone} world: strongest call is ${U[lead].name} ${lp>=.5?'higher':'lower'}, ${Math.round((lp>=.5?lp:1-lp)*100)}% odds`;
+  const up=ids.filter(i=>it[i].p>=.55).length,dn=ids.filter(i=>it[i].p<=.45).length;$('dSub').textContent=`${up} markets lean up, ${dn} lean down, ${ids.length-up-dn} near a coin flip · ${ids.length} of ${W.universe.length} markets forecast`;}
+ const T=M.totals||{},se=S.sentiment||{},vix=pr.VIX,iv=pr.INDIAVIX,mood=P.mood;
+ const k=(l,v,s,c)=>`<div class="card kpi"><div class="s">${l}</div><div class="v ${c||''}">${v}</div><div class="s">${s}</div></div>`;
+ $('dKpi').innerHTML=k('World risk mood',mood==null?'—':(mood>0?'+':mood<0?'−':'')+Math.abs(Math.round(mood*100)),'−100 panic · +100 euphoria',mood>0?'pos':mood<0?'neg':'')+
+  k('Brain hit rate',T.n?Math.round(T.hits/T.n*100)+'%':'—',T.n?`${T.hits} of ${T.n} graded · Brier ${(T.brier/T.n).toFixed(3)}`:'grading starts 24 h after first scan')+
+  k('Crypto Fear & Greed',se.fg??'—',esc(se.fgLabel||'0 fear · 100 greed'))+k('VIX (US fear)',vix?nf(vix.last):'—',vix?pc(vix.chg,1)+' · above 25 = stressed':'')+k('India VIX',iv?nf(iv.last):'—',iv?pc(iv.chg,1)+' on the day':'');
+ // what it means for the bot
+ const g=i=>it[i]?it[i].p:null,nifty=g('NIFTY'),bank=g('BANKNIFTY'),inr=g('USDINR'),oil=g('BRENT');
+ if(nifty!=null){const score=((nifty-.5)*2+((bank??.5)-.5)*1.5-((inr??.5)-.5)*1-((oil??.5)-.5)*.6+(mood||0)*.8)/3.9;
+  const lab=score>0.06?'Tailwind for intraday longs':score<-0.06?'Headwind for intraday longs':'Neutral backdrop';
+  $('dBot').innerHTML=`<div class="cue"><b class="${score>0.06?'pos':score<-0.06?'neg':''}">${lab}</b> <span class="sm mut">(backdrop score ${(score*100).toFixed(0)})</span><div class="sm" style="margin-top:4px">Nifty ${Math.round(nifty*100)}% odds up · Bank Nifty ${bank!=null?Math.round(bank*100)+'%':'—'} · USD/INR ${inr!=null?Math.round(inr*100)+'% odds up (rupee '+(inr>=.5?'weaker':'stronger')+')':'—'} · Brent ${oil!=null?Math.round(oil*100)+'% odds up':'—'} · world mood ${mood!=null?Math.round(mood*100):'—'}</div>
+   <div class="sm mut" style="margin-top:4px">Information only: the bot's own regime, news and flow checks still decide every trade. Mid and small caps usually amplify Nifty's direction and suffer most on risk-off days.</div></div>`}else $('dBot').innerHTML='<div class="sm mut">Appears after the first world scan.</div>';
+ // board
+ const G=['US','India','Europe','Asia','FX','Rates','Volatility','Commodities','Crypto'];
+ $('dFil').innerHTML=['All',...G].map(x=>`<button class="small" data-f="${x}" style="${dF===x?'background:var(--ink);color:var(--card)':''}">${x}</button>`).join('');
+ let h='';G.forEach(gr=>{if(dF!=='All'&&dF!==gr)return;const L=W.universe.filter(a=>a.group===gr);h+=`<div class="grp">${gr}</div>`;
+  L.forEach(a=>{const f=it[a.id],q=pr[a.id]||{};if(!f)return;const up=f.p>=.5,off=(f.p-.5)*100;
+   h+=`<button class="cell" data-id="${a.id}" aria-expanded="${dOpen===a.id}"><div class="t"><span>${esc(a.name)}</span><span class="${q.chg>0?'pos':q.chg<0?'neg':''}">${q.chg==null?'':(q.chg>0?'▲ ':'▼ ')+pc(q.chg)}</span></div><div class="px">${nf(q.last)}${a.id==='US10Y'?'%':''}</div>
+    <div class="o"><b class="${up?'pos':'neg'}">${up?'▲':'▼'} ${Math.round((up?f.p:1-f.p)*100)}%</b><span class="sm mut">${up?'odds up':'odds down'} · ${f.exp>0?'+':''}${f.exp}%</span></div>
+    <div class="m"><i style="left:${off>=0?50:50+off}%;width:${Math.abs(off)}%;background:${up?UC:DC}"></i></div>${dSpark(W.hist[a.id])}</button>`;
+   if(dOpen===a.id)h+=dDetail(a,f,S,W);});
+  const pend=L.filter(a=>!it[a.id]).map(a=>a.name);if(pend.length)h+=`<div class="pend">No data this scan: ${esc(pend.join(', '))}</div>`;});
+ $('dBoard').innerHTML=h;
+ // news + mood + links
+ $('dNews').innerHTML=(S.news||[]).slice(0,16).map(n=>`<li><span class="sc ${n.score>0?'pos':n.score<0?'neg':''}">${n.score>0?'+':''}${Number(n.score).toFixed(1)}</span><span>${esc(n.h)}<br><span class="mut">${esc(n.src)} · ${esc(n.topic)} · impact ${'●'.repeat(n.impact||1)}</span></span></li>`).join('')||'<li class="mut">No headlines yet.</li>';
+ const row=(l,v)=>`<div class="r"><span>${esc(l)}</span>${mbar(v)}<span class="v ${v>0?'pos':v<0?'neg':''}">${v==null?'—':(v>0?'+':'')+Math.round(v*100)}</span></div>`;
+ $('dMood').innerHTML=[['US','us'],['India','india'],['Europe','europe'],['Asia','asia'],['Crypto','crypto']].map(([l,kk])=>row(l+' investors',se[kk])).join('');
+ $('dLinks').innerHTML=['NIFTY','XAU','BRENT','USDINR','BTC','DXY'].filter(i=>it[i]).map(i=>row(U[i].name,it[i].f[4])).join('')||'<div class="sm mut">After the first scan.</div>';
+ // learning
+ const days=Object.entries(M.daily||{}).filter(([,d])=>d.n).sort().slice(-14);
+ $('dDaily').innerHTML=days.length?days.map(([d,x])=>{const r=x.hits/x.n;return `<div class="r"><span>${d.slice(5)} · ${x.n} calls</span><div class="tr"><i style="left:0;width:${r*100}%;background:${r>=.5?UC:DC}"></i></div><span class="v">${Math.round(r*100)}%</span></div>`}).join('')+'<div class="sm mut">50% = coin flip.</div>':'<div class="sm mut">Every scan grades the forecast made 24 hours earlier. The first grades appear one day after the first scan.</div>';
+ const FH=M.featHits||{},EW=(M.weights||{}).eq||[];
+ $('dFeat').innerHTML=W.feats.map((f,i)=>{const x=FH[f]||{n:0,h:0},r=x.n?x.h/x.n:null;return `<div class="r"><span>${esc(W.featNames[f])}</span><div class="tr"><i style="left:0;width:${(r||0)*100}%;background:${r!=null&&r>=.5?UC:DC}"></i></div><span class="v">${r==null?'—':Math.round(r*100)+'%'} · w ${EW[i+1]!=null?EW[i+1].toFixed(2):'—'}</span></div>`}).join('');
+ const sc=(W.scores||[])[0];
+ $('dGraded').innerHTML=sc&&sc.items?`<div class="sm mut">Forecast of ${ist(sc.predAt)} graded ${ist(sc.at)}: ${sc.hits} of ${sc.n} right</div><table><thead><tr><th>Market</th><th>Said up</th><th>Real move</th><th>Result</th></tr></thead><tbody>${Object.entries(sc.items).map(([i,r])=>`<tr><td>${esc(U[i]?U[i].name:i)}</td><td>${Math.round(r.p*100)}%</td><td class="${r.move>0?'pos':'neg'}">${pc(r.move)}</td><td>${r.hit?'✓ right':'✗ wrong'}</td></tr>`).join('')}</tbody></table>`:'<div class="sm mut">No graded calls yet.</div>';
+ const CN={eq:'Stock indices',fx:'Currencies',rate:'Bond yields',vol:'Volatility',cmd:'Commodities',crypto:'Crypto'},CS=M.classStats||{};
+ $('dCls').innerHTML=`<table><thead><tr><th>Type</th><th>Graded</th><th>Hit rate</th></tr></thead><tbody>${Object.keys(CN).map(c=>`<tr><td>${CN[c]}</td><td>${CS[c]?CS[c].n:0}</td><td>${CS[c]&&CS[c].n?Math.round(CS[c].hits/CS[c].n*100)+'%':'—'}</td></tr>`).join('')}</tbody></table>`;
+ $('dLog').innerHTML=(W.log||[]).map(x=>`<div><span class="mut">${ist(x.at)}</span> ${esc(x.msg)}</div>`).join('')||'<span class="mut">No scans yet.</span>';
+ $('dQ').hidden=$('dAsk').hidden=!W.claude;if(!W.claude)$('dAns').textContent='Claude is off on this bot. Add ANTHROPIC_API_KEY to ask questions about the world scan.';
+}
+function dSpark(v){if(!v||v.length<2)return '';const mn=Math.min(...v),mx=Math.max(...v);const d=v.map((x,i)=>`${(i/(v.length-1)*100).toFixed(1)},${(20-(mx===mn?10:(x-mn)/(mx-mn)*20)).toFixed(1)}`).join(' ');
+ return `<svg viewBox="0 0 100 20" preserveAspectRatio="none" style="width:100%;height:20px;margin-top:6px" aria-hidden="true"><polyline points="${d}" fill="none" stroke="${v[v.length-1]>=v[0]?UC:DC}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`}
+function dDetail(a,f,S,W){const bars=W.feats.map((k,i)=>{const v=f.contrib[i];return `<div class="r"><span>${esc(W.featNames[k])}</span>${mbar(Math.max(-1,Math.min(1,v)))}<span class="v ${v>0?'pos':v<0?'neg':''}">${v>0?'+':''}${v.toFixed(2)}</span></div>`}).join('');
+ const news=(S.news||[]).filter(n=>a.themes.some(t=>n.effects&&typeof n.effects[t]==='number')).slice(0,4);
+ return `<div class="det"><div><b>${esc(a.name)}: ${Math.round(f.p*100)}% odds of higher in 24 h</b><div class="sm mut">Expected ${f.exp>0?'+':''}${f.exp}% inside a typical day of ±${a.s}% · biggest driver: ${esc(W.featNames[f.top])}</div><div class="bars" style="margin-top:8px">${bars}</div></div>
+ <div><b>Headlines that touch it</b><ul class="news">${news.map(n=>`<li><span class="sc">${n.score>0?'+':''}${Number(n.score).toFixed(1)}</span><span>${esc(n.h)}<br><span class="mut">${esc(n.src)}</span></span></li>`).join('')||'<li class="mut">None this scan — odds come from prices and cross-market links.</li>'}</ul></div></div>`}
+$('dBoard').addEventListener('click',e=>{const c=e.target.closest('.cell');if(!c)return;dOpen=dOpen===c.dataset.id?null:c.dataset.id;dRender()});
+$('dFil').addEventListener('click',e=>{const f=e.target.dataset.f;if(f){dF=f;dRender()}});
+$('dScan').onclick=async()=>{const r=await fetch('/api/world/scan',{method:'POST'});$('dStat').textContent=(await r.json()).msg;setTimeout(dLoad,70000)};
+async function dAsk(q){$('dAns').textContent='Thinking…';try{const r=await fetch('/api/world/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q})});$('dAns').textContent=r.ok?(await r.json()).answer:'Could not ask right now.'}catch(e){$('dAns').textContent='Could not ask right now.'}}
+$('dQ').addEventListener('click',e=>{const q=e.target.dataset.q;if(q)dAsk(q)});
+$('dAsk').addEventListener('submit',e=>{e.preventDefault();const v=$('dIn').value.trim();if(v)dAsk(v)});
+if(location.hash==='#deep')tab('deep');
 async function poll(){try{const r=await fetch('/api/state');if(r.ok)render(await r.json());}catch(e){$('sub').textContent='connection lost — retrying'}setTimeout(poll,1000)}
 poll();
 </script></body></html>

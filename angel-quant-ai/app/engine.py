@@ -73,6 +73,8 @@ class Engine:
         self.learner = Learner(self)                      # daily learning loop: size weights + pauses per strategy
         from app.ai.scorer import TradeBrain
         self.brain = TradeBrain(self)                     # self-learning ML scorer: learns from every signal's real outcome
+        from app.ai.world import WorldBrain
+        self.world = WorldBrain(self)                     # world markets deep dive: hourly odds + self-grading (display only)
         from app.market.momentum import Momentum
         self.momentum = Momentum()                        # research rule: 20-day momentum rank of every universe stock
         self.running = True
@@ -274,6 +276,8 @@ class Engine:
         self.risk.st.peak_equity = max(self.risk.st.peak_equity, float(saved.get("peak_equity") or 0))
         self.risk.st.disabled_strategies = set(saved.get("disabled") or [])
         asyncio.create_task(self._persist_loop())
+        if self.s.world_enabled:
+            asyncio.create_task(self.world.loop())        # world deep dive needs no broker login
         self.event("start", f"engine starting in {self.mode.upper()} mode; live blockers: {self.s.live_blockers() or 'none'}")
         if not self.s.has_angel_credentials:
             self.status = "waiting for Angel One credentials (set ANGEL_API_KEY, ANGEL_CLIENT_CODE, ANGEL_MPIN, ANGEL_TOTP_SECRET)"

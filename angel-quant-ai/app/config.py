@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     learn_pause_days: int = 5
     # self-learning trade scorer (app/ai/scorer.py): learns from every signal's real outcome, retrained nightly
     brain_enabled: bool = True
+    # World Market Brain (dashboard Deep Dive tab): world prices, news & sentiment, 24 h odds, self-grading. Display only.
+    world_enabled: bool = True
+    world_every_min: int = 60
     brain_min_samples: int = 300                # lessons needed before the first model
     brain_min_auc: float = 0.55                 # adopt a model only if it beats chance on unseen recent days
     brain_min_prob: float = 0.30                # skip signals whose win chance is below this (once a model is adopted)
