@@ -1,6 +1,7 @@
 # HTTPS for the dashboard. DOMAIN defaults to <your-ip>.sslip.io, which points at your server's IP,
 # so Let's Encrypt can issue a certificate without you buying a domain.
-{$DOMAIN} {
+# SITE_DOMAINS (docker-compose.yml) adds your own domain(s); each gets its own free certificate once its DNS points here.
+{$DOMAIN}, {$SITE_DOMAINS} {
 	encode gzip
 	reverse_proxy bot:8000
 }

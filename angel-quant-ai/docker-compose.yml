@@ -23,6 +23,7 @@ services:
     image: caddy:2-alpine
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      SITE_DOMAINS: ${SITE_DOMAINS:-prakritifintech.com, www.prakritifintech.com}
     ports: ["80:80", "443:443"]
     volumes: [./deploy/Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data]
     depends_on: [bot]
