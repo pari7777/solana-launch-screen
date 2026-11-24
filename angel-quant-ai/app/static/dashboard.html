@@ -31,6 +31,7 @@ a{color:var(--b)}
 .dd .cell[aria-expanded=true]{border-color:var(--ink)}
 .dd .cell .t{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--mut)}
 .dd .cell .px{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+.dd .cell .pv{display:flex;flex-wrap:wrap;gap:0 6px;align-items:baseline;font-size:12px;color:var(--mut);margin-top:2px}.dd .cell .pv b{font-size:15px;font-variant-numeric:tabular-nums}
 .dd .cell .o{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 8px;margin-top:4px}
 .dd .cell .o b{font-size:21px;font-variant-numeric:tabular-nums}
 .dd .m{position:relative;height:7px;border-radius:4px;background:var(--chip);margin-top:6px;overflow:hidden}
@@ -161,6 +162,8 @@ const pc=(v,d=2)=>v==null?'—':(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(d)+'%
 const nf=v=>v==null?'—':Number(v).toLocaleString('en-IN',{maximumFractionDigits:Math.abs(v)>=1000?0:2});
 const ist=s=>{const d=new Date(s);return isNaN(d)?'—':d.toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})+' IST'};
 const UC='var(--g)',DC='var(--r)';
+// predicted value in 24 h from the expected move; the range is one typical day either side (US10Y moves in 0.1-point units)
+function pval(id,last,exp,band){if(last==null)return null;const y=id==='US10Y';const f=d=>y?last+d*0.1:last*(1+d/100);return {v:f(exp),lo:f(-band),hi:f(band)}}
 function mbar(v){const w=Math.min(50,Math.abs(v||0)*50);return `<div class="tr"><i style="left:${v>=0?50:50-w}%;width:${w}%;background:${v>=0?UC:DC}"></i></div>`}
 function dRender(){const W=DW,P=W.pred||{},it=P.items||{},S=W.snap||{},pr=S.prices||{},M=W.model||{},U={};W.universe.forEach(a=>U[a.id]=a);
  $('dStat').textContent=(S.at?`Last scan ${ist(S.at)} · every ${W.every_min} min · headlines read by ${S.reader||'—'}`:'First world scan runs within a few minutes of the bot starting')+(W.running?' · scanning now…':'')+(W.error?' · '+W.error:'');
@@ -172,19 +175,20 @@ function dRender(){const W=DW,P=W.pred||{},it=P.items||{},S=W.snap||{},pr=S.pric
  const k=(l,v,s,c)=>`<div class="card kpi"><div class="s">${l}</div><div class="v ${c||''}">${v}</div><div class="s">${s}</div></div>`;
  $('dKpi').innerHTML=k('World risk mood',mood==null?'—':(mood>0?'+':mood<0?'−':'')+Math.abs(Math.round(mood*100)),'−100 panic · +100 euphoria',mood>0?'pos':mood<0?'neg':'')+
   k('Brain hit rate',T.n?Math.round(T.hits/T.n*100)+'%':'—',T.n?`${T.hits} of ${T.n} graded · Brier ${(T.brier/T.n).toFixed(3)}`:'grading starts 24 h after first scan')+
-  k('Crypto Fear & Greed',se.fg??'—',esc(se.fgLabel||'0 fear · 100 greed'))+k('VIX (US fear)',vix?nf(vix.last):'—',vix?pc(vix.chg,1)+' · above 25 = stressed':'')+k('India VIX',iv?nf(iv.last):'—',iv?pc(iv.chg,1)+' on the day':'');
+  k('Crypto Fear & Greed',se.fg??'—',esc(se.fgLabel||'0 fear · 100 greed'))+k('VIX (US fear)',vix?nf(vix.last):'—',vix?pc(vix.chg,1)+(it.VIX?` · 24 h view → ${nf(pval('VIX',vix.last,it.VIX.exp,7).v)}`:'')+' · above 25 = stressed':'')+k('India VIX',iv?nf(iv.last):'—',iv?pc(iv.chg,1)+' on the day':'');
  // what it means for the bot
  const g=i=>it[i]?it[i].p:null,nifty=g('NIFTY'),bank=g('BANKNIFTY'),inr=g('USDINR'),oil=g('BRENT');
  if(nifty!=null){const score=((nifty-.5)*2+((bank??.5)-.5)*1.5-((inr??.5)-.5)*1-((oil??.5)-.5)*.6+(mood||0)*.8)/3.9;
   const lab=score>0.06?'Tailwind for intraday longs':score<-0.06?'Headwind for intraday longs':'Neutral backdrop';
-  $('dBot').innerHTML=`<div class="cue"><b class="${score>0.06?'pos':score<-0.06?'neg':''}">${lab}</b> <span class="sm mut">(backdrop score ${(score*100).toFixed(0)})</span><div class="sm" style="margin-top:4px">Nifty ${Math.round(nifty*100)}% odds up · Bank Nifty ${bank!=null?Math.round(bank*100)+'%':'—'} · USD/INR ${inr!=null?Math.round(inr*100)+'% odds up (rupee '+(inr>=.5?'weaker':'stronger')+')':'—'} · Brent ${oil!=null?Math.round(oil*100)+'% odds up':'—'} · world mood ${mood!=null?Math.round(mood*100):'—'}</div>
+  const NP=pr.NIFTY&&it.NIFTY?pval('NIFTY',pr.NIFTY.last,it.NIFTY.exp,1):null;
+  $('dBot').innerHTML=`<div class="cue"><b class="${score>0.06?'pos':score<-0.06?'neg':''}">${lab}</b> <span class="sm mut">(backdrop score ${(score*100).toFixed(0)})</span>${NP?`<div class="sm" style="margin-top:4px"><b>Nifty 24 h view: ${nf(pr.NIFTY.last)} → ${nf(NP.v)}</b> · likely range ${nf(NP.lo)}–${nf(NP.hi)}</div>`:''}<div class="sm" style="margin-top:4px">Nifty ${Math.round(nifty*100)}% odds up · Bank Nifty ${bank!=null?Math.round(bank*100)+'%':'—'} · USD/INR ${inr!=null?Math.round(inr*100)+'% odds up (rupee '+(inr>=.5?'weaker':'stronger')+')':'—'} · Brent ${oil!=null?Math.round(oil*100)+'% odds up':'—'} · world mood ${mood!=null?Math.round(mood*100):'—'}</div>
    <div class="sm mut" style="margin-top:4px">Information only: the bot's own regime, news and flow checks still decide every trade. Mid and small caps usually amplify Nifty's direction and suffer most on risk-off days.</div></div>`}else $('dBot').innerHTML='<div class="sm mut">Appears after the first world scan.</div>';
  // board
  const G=['US','India','Europe','Asia','FX','Rates','Volatility','Commodities','Crypto'];
  $('dFil').innerHTML=['All',...G].map(x=>`<button class="small" data-f="${x}" style="${dF===x?'background:var(--ink);color:var(--card)':''}">${x}</button>`).join('');
  let h='';G.forEach(gr=>{if(dF!=='All'&&dF!==gr)return;const L=W.universe.filter(a=>a.group===gr);h+=`<div class="grp">${gr}</div>`;
   L.forEach(a=>{const f=it[a.id],q=pr[a.id]||{};if(!f)return;const up=f.p>=.5,off=(f.p-.5)*100;
-   h+=`<button class="cell" data-id="${a.id}" aria-expanded="${dOpen===a.id}"><div class="t"><span>${esc(a.name)}</span><span class="${q.chg>0?'pos':q.chg<0?'neg':''}">${q.chg==null?'':(q.chg>0?'▲ ':'▼ ')+pc(q.chg)}</span></div><div class="px">${nf(q.last)}${a.id==='US10Y'?'%':''}</div>
+   h+=`<button class="cell" data-id="${a.id}" aria-expanded="${dOpen===a.id}"><div class="t"><span>${esc(a.name)}</span><span class="${q.chg>0?'pos':q.chg<0?'neg':''}">${q.chg==null?'':(q.chg>0?'▲ ':'▼ ')+pc(q.chg)}</span></div><div class="px">${nf(q.last)}${a.id==='US10Y'?'%':''}</div>${(()=>{const pv=pval(a.id,q.last,f.exp,a.s);return pv?`<div class="pv" title="Brain's expected value 24 h after the scan; range = a typical day either side">24 h view <b class="${up?'pos':'neg'}">→ ${nf(pv.v)}${a.id==='US10Y'?'%':''}</b><span>range ${nf(pv.lo)}–${nf(pv.hi)}</span></div>`:''})()}
     <div class="o"><b class="${up?'pos':'neg'}">${up?'▲':'▼'} ${Math.round((up?f.p:1-f.p)*100)}%</b><span class="sm mut">${up?'odds up':'odds down'} · ${f.exp>0?'+':''}${f.exp}%</span></div>
     <div class="m"><i style="left:${off>=0?50:50+off}%;width:${Math.abs(off)}%;background:${up?UC:DC}"></i></div>${dSpark(W.hist[a.id])}</button>`;
    if(dOpen===a.id)h+=dDetail(a,f,S,W);});
